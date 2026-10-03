@@ -36,7 +36,7 @@ describe('requests from this machine', () => {
   it('allows reads', async () => {
     const r = await call('/api/sessions');
     expect(r.status).toBe(200);
-    expect((await r.json()).access).toBe('local');
+    expect(((await r.json()) as any).access).toBe('local');
   });
 
   it('blocks DNS-rebinding hosts', async () => {
@@ -69,7 +69,7 @@ describe('requests from the network', () => {
     expect((await call('/api/sessions', { remote, host, headers: { authorization: 'Bearer wrong' } })).status).toBe(401);
     const bearer = await call('/api/sessions', { remote, host, headers: { authorization: 'Bearer secret-token-123' } });
     expect(bearer.status).toBe(200);
-    expect((await bearer.json()).access).toBe('remote');
+    expect(((await bearer.json()) as any).access).toBe('remote');
     const cookie = await call('/api/sessions', { remote, host, headers: { cookie: `${TOKEN_COOKIE}=secret-token-123` } });
     expect(cookie.status).toBe(200);
   });

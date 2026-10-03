@@ -95,10 +95,12 @@ export class SessionIndex extends EventEmitter {
     private settings: SettingsStore,
     private meta: MetaStore,
     cacheDir: string,
+    /** --claude-dir: used for this run only, never saved */
+    claudeDirOverride?: string,
   ) {
     super();
     this.setMaxListeners(100);
-    this.layout = claudeLayout(settings.get().claudeDir);
+    this.layout = claudeLayout(claudeDirOverride ?? settings.get().claudeDir);
     this.cacheFile = path.join(cacheDir, `index-v${PARSER_VERSION}.json`);
     const cached = readJsonSync<CacheFile | null>(this.cacheFile, null);
     if (cached?.version === PARSER_VERSION && cached.files) {

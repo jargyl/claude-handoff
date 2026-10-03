@@ -67,12 +67,11 @@ async function main() {
   const paths = resolvePaths(opts.dataDir);
   fs.mkdirSync(paths.dataDir, { recursive: true });
   const settings = new SettingsStore(paths.configFile);
-  if (opts.claudeDir) await settings.update((s) => void (s.claudeDir = path.resolve(opts.claudeDir!)));
   if (opts.lan) await settings.update((s) => void (s.lan.enabled = true));
   const meta = new MetaStore(paths.metaFile);
   const devices = new DeviceStore(paths.devicesFile);
   const events = new EventHub();
-  const index = new SessionIndex(settings, meta, paths.cacheDir);
+  const index = new SessionIndex(settings, meta, paths.cacheDir, opts.claudeDir ? path.resolve(opts.claudeDir) : undefined);
   const staging = new StagingStore(paths.inboxDir);
   const history = new HistoryStore(paths.historyFile);
   let port = opts.port ?? settings.get().port ?? DEFAULT_PORT;

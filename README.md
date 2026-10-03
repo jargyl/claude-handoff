@@ -100,7 +100,7 @@ Costs are API-equivalent estimates at Anthropic's list prices. A Claude subscrip
 npm start -- [options]
 
   --port <n>          Port (default 7420; the next free one if taken)
-  --lan               Turn on network sharing
+  --lan               Turn on network sharing (remembered, like the switch in Devices)
   --host <addr>       Bind to a specific address (overrides --lan)
   --claude-dir <dir>  Claude Code folder (default ~/.claude or $CLAUDE_CONFIG_DIR)
   --data-dir <dir>    Handoff's own data (default ~/.claude-handoff, or $HANDOFF_DATA_DIR)
