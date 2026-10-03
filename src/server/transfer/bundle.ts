@@ -130,7 +130,7 @@ export function streamBundle(plan: BundlePlan): ReadableStream<Uint8Array> {
   };
 
   const addBuffer = async (name: string, data: Uint8Array, store = false) => {
-    const f = store ? new ZipPassThrough(name) : new ZipDeflate(name, { level: 6 });
+    const f = store ? new ZipPassThrough(name) : new ZipDeflate(name, { level: 3 }); // images dominate; higher levels barely shrink it
     zip.add(f);
     const CHUNK = 1 << 20;
     if (data.length === 0) {

@@ -690,7 +690,12 @@ export function createApp(ctx: AppContext) {
     const root = path.resolve(ctx.webRoot);
     const indexHtml = path.join(root, 'index.html');
     app.get('*', async (c) => {
-      const reqPath = decodeURIComponent(new URL(c.req.url).pathname);
+      let reqPath: string;
+      try {
+        reqPath = decodeURIComponent(new URL(c.req.url).pathname);
+      } catch {
+        throw bad('Malformed URL');
+      }
       if (reqPath.startsWith('/api/')) throw notFound('Unknown API route');
       const file = path.resolve(root, '.' + reqPath);
       if (file.startsWith(root + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
