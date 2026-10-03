@@ -427,15 +427,54 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
       /* ignore */
     }
   }, [f]);
-  const units = useMemo(() => buildUnits(t.data?.items ?? [], f), [t.data, f]);
-  const [find, setFind] = useState('');
+  // A search result link (#m-<uuid>) may point at injected context or a slash-command
+  // message, which the default filters hide: show those until you change a filter.
+  const [reveal, setReveal] = useState(false);
+  const shownFilters = useMemo(() => (reveal ? { ...f, context: true, meta: true } : f), [f, reveal]);
+  const units = useMemo(() => buildUnits(t.data?.items ?? [], shownFilters), [t.data, shownFilters]);
+  // ?find= comes with links from search results, so the word you searched for is marked here too
+  const [find, setFind] = useState(() => new URLSearchParams(location.search).get('find') ?? '');
   const [pos, setPos] = useState(0);
   const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  const findQ = find.trim().toLowerCase();
   const matches = useMemo(() => {
-    const q = find.trim().toLowerCase();
-    if (q.length < 2) return [];
-    return units.map((u, i) => (unitText(u).toLowerCase().includes(q) ? i : -1)).filter((i) => i >= 0);
-  }, [units, find]);
+    if (findQ.length < 2) return [];
+    return units.map((u, i) => (unitText(u).toLowerCase().includes(findQ) ? i : -1)).filter((i) => i >= 0);
+  }, [units, findQ]);
+
+  // Off-screen messages render with an estimated height (content-visibility), so a single
+  // scroll lands short once they lay out. Keep correcting each frame until the target holds
+  // still. A newer jump, the wheel or a touch cancels the one in flight.
+  const scrollJob = useRef(0);
+  const [renderTo, setRenderTo] = useState<number | undefined>(undefined);
+  const scrollToEl = useCallback((getEl: () => Element | null, block: ScrollLogicalPosition) => {
+    const job = ++scrollJob.current;
+    const started = performance.now();
+    let lastTop = NaN;
+    let still = 0;
+    const step = () => {
+      if (job !== scrollJob.current) return;
+      const el = getEl();
+      if (el) {
+        el.scrollIntoView({ block, behavior: 'auto' });
+        const top = el.getBoundingClientRect().top;
+        still = Math.abs(top - lastTop) < 1 ? still + 1 : 0;
+        lastTop = top;
+        if (still >= 4) return;
+      }
+      if (performance.now() - started < 3000) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, []);
+  useEffect(() => {
+    const cancel = () => scrollJob.current++;
+    window.addEventListener('wheel', cancel, { passive: true });
+    window.addEventListener('touchmove', cancel, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', cancel);
+      window.removeEventListener('touchmove', cancel);
+    };
+  }, []);
 
   /** Matches are centered; prompts go to the top so the outline and J/K agree on which one is current. */
   const scrollToUnit = useCallback(
@@ -443,20 +482,16 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
       setHighlight(block === 'center' ? i : undefined);
       const u = units[i];
       if (!u) return;
+      setRenderTo(i);
       const id = `m-${unitUuids(u)[0]}`;
-      let tries = 0;
-      const go = () => {
-        const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ block, behavior: 'smooth' });
-        else if (tries++ < 20) requestAnimationFrame(go);
-      };
-      requestAnimationFrame(go);
+      scrollToEl(() => document.getElementById(id), block);
     },
-    [units],
+    [units, scrollToEl],
   );
 
   // New search text jumps to the first match; new messages arriving (live) keep your place.
-  const lastFind = useRef('');
+  // Opened from a search result, the hash picks the match instead (below).
+  const lastFind = useRef(location.hash.startsWith('#m-') ? find : '');
   useEffect(() => {
     if (find !== lastFind.current) {
       lastFind.current = find;
@@ -472,25 +507,37 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
   const jumped = useRef<string | null>(null);
   useEffect(() => {
     const hash = location.hash.replace(/^#m-/, '');
-    if (!hash || !units.length || jumped.current === hash) return;
+    if (!hash || !t.data || jumped.current === hash) return;
     const i = units.findIndex((u) => unitUuids(u).includes(hash));
     if (i >= 0) {
       jumped.current = hash;
+      const m = matches.indexOf(i);
+      if (m >= 0) setPos(m);
       scrollToUnit(i);
+    } else if (!reveal) {
+      setReveal(true);
     }
-  }, [location.hash, units, scrollToUnit]);
+  }, [location.hash, units, t.data, matches, scrollToUnit, reveal]);
+  const setFilters = (next: TranscriptFilters) => {
+    setReveal(false);
+    setF(next);
+  };
 
   // Follow live sessions only while the end of the conversation is on screen. A sentinel
   // after the last message tells us; it stays accurate as content grows, unlike scroll events.
   const atBottom = useRef(false);
+  const [atEnd, setAtEnd] = useState(true);
   const [newBelow, setNewBelow] = useState(false);
   const observer = useRef<IntersectionObserver | null>(null);
+  const sentinelEl = useRef<HTMLDivElement | null>(null);
   const sentinel = useCallback((el: HTMLDivElement | null) => {
     observer.current?.disconnect();
+    sentinelEl.current = el;
     if (!el) return;
     observer.current = new IntersectionObserver(
       ([e]) => {
         atBottom.current = !!e?.isIntersecting;
+        setAtEnd(!!e?.isIntersecting);
         if (e?.isIntersecting) setNewBelow(false);
       },
       { rootMargin: '0px 0px 240px 0px' },
@@ -498,6 +545,11 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     observer.current.observe(el);
   }, []);
   useEffect(() => () => observer.current?.disconnect(), []);
+  const jumpToEnd = useCallback(() => {
+    setHighlight(undefined);
+    setRenderTo(Number.MAX_SAFE_INTEGER);
+    scrollToEl(() => sentinelEl.current, 'end');
+  }, [scrollToEl]);
   const count = t.data?.items.length ?? 0;
   const prevCount = useRef(count);
   useLayoutEffect(() => {
@@ -541,6 +593,12 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
       const el = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (document.querySelector('dialog[open]')) return;
+      // the browser's own End stops at whatever has rendered so far
+      if (e.key === 'End') {
+        e.preventDefault();
+        jumpToEnd();
+        return;
+      }
       if (e.key === 'j' || e.key === 'k') {
         // before the first prompt reaches the top, J goes to the first one
         const firstEl = prompts[0] ? document.getElementById(`m-${prompts[0].uuid}`) : null;
@@ -552,9 +610,13 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, prompts, scrollToUnit]);
+  }, [active, prompts, scrollToUnit, jumpToEnd]);
 
-  const ctx: ToolContext = useMemo(() => ({ sessionId: s.id, agent, projectPath: s.projectPath, home, live: !!s.live, onOpenSubagent }), [s.id, agent, s.projectPath, home, s.live, onOpenSubagent]);
+  const ctxFind = findQ.length >= 2 ? findQ : undefined;
+  const ctx: ToolContext = useMemo(
+    () => ({ sessionId: s.id, agent, projectPath: s.projectPath, home, live: !!s.live, onOpenSubagent, find: ctxFind }),
+    [s.id, agent, s.projectPath, home, s.live, onOpenSubagent, ctxFind],
+  );
 
   if (t.isLoading) {
     return (
@@ -582,16 +644,16 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
             )}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip on={f.tools} onClick={() => setF({ ...f, tools: !f.tools })}>Tool calls</FilterChip>
-            <FilterChip on={f.thinking} onClick={() => setF({ ...f, thinking: !f.thinking })}>Reasoning</FilterChip>
-            <FilterChip on={f.context} onClick={() => setF({ ...f, context: !f.context })}>Injected context</FilterChip>
-            <FilterChip on={f.branches} onClick={() => setF({ ...f, branches: !f.branches })}>Rewound branches</FilterChip>
+            <FilterChip on={shownFilters.tools} onClick={() => setFilters({ ...shownFilters, tools: !shownFilters.tools })}>Tool calls</FilterChip>
+            <FilterChip on={shownFilters.thinking} onClick={() => setFilters({ ...shownFilters, thinking: !shownFilters.thinking })}>Reasoning</FilterChip>
+            <FilterChip on={shownFilters.context} onClick={() => setFilters({ ...shownFilters, context: !shownFilters.context })}>Injected context</FilterChip>
+            <FilterChip on={shownFilters.branches} onClick={() => setFilters({ ...shownFilters, branches: !shownFilters.branches })}>Rewound branches</FilterChip>
           </div>
         </div>
         {units.length === 0 ? (
           <EmptyState icon={MessagesSquare} title="Nothing to show yet">This conversation has no messages, or they're all hidden by the filters above.</EmptyState>
         ) : (
-          <TranscriptView units={units} ctx={ctx} f={f} highlightIndex={highlight} renderAll={find.trim().length >= 2} />
+          <TranscriptView units={units} ctx={ctx} f={shownFilters} highlightIndex={highlight} renderTo={renderTo} renderAll={findQ.length >= 2} />
         )}
         <div ref={sentinel} aria-hidden className="h-px" />
         {s.live && !agent && (
@@ -600,10 +662,22 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
             {s.live.status === 'idle' ? 'Waiting for your next prompt in Claude Code.' : 'Claude is working. New messages appear here as they happen.'}
           </p>
         )}
-        {newBelow && (
-          <button onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })} className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-signal-line bg-signal px-4 py-2 text-sm font-medium text-signal-ink shadow-[var(--shadow)] lg:ml-[120px]">
+        {newBelow ? (
+          <button onClick={jumpToEnd} className="fixed bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-signal-line bg-signal px-4 py-2 text-sm font-medium text-signal-ink shadow-[var(--shadow)] lg:ml-[120px]">
             <ArrowDown className="size-4" /> New messages
           </button>
+        ) : (
+          !atEnd &&
+          units.length > 0 && (
+            <button
+              onClick={jumpToEnd}
+              aria-label="Jump to the end"
+              title="Jump to the end (End)"
+              className="fixed bottom-6 right-6 z-20 grid size-10 place-items-center rounded-full border border-line-strong bg-raised text-ink-2 shadow-[var(--shadow)] hover:text-ink xl:right-[calc(260px+3rem)]"
+            >
+              <ArrowDown className="size-4" />
+            </button>
+          )
         )}
       </div>
       <aside className="hidden xl:block">

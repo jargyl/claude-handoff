@@ -30,6 +30,12 @@ function Snippet({ hit }: { hit: SearchHit }) {
   );
 }
 
+/** The longest plain search word, handed to the session page's find box. */
+function findTerm(q: string): string {
+  const terms = [...q.matchAll(/(-?)"([^"]+)"|(-?)(\S+)/g)].filter((m) => !(m[1] || m[3])).map((m) => (m[2] ?? m[4] ?? '').trim());
+  return terms.sort((a, b) => b.length - a.length)[0] ?? '';
+}
+
 const ROLE = { user: { icon: User, label: 'You' }, assistant: { icon: Bot, label: 'Claude' }, tool: { icon: Wrench, label: 'Tool' } };
 
 export default function SearchPage() {
@@ -143,7 +149,7 @@ export default function SearchPage() {
                     const R = ROLE[h.role];
                     return (
                       <li key={`${h.uuid}-${i}`}>
-                        <Link to={`/sessions/${sid}#m-${h.uuid}`} className="flex gap-3 px-4 py-2.5 hover:bg-raised">
+                        <Link to={`/sessions/${sid}?find=${encodeURIComponent(findTerm(q))}#m-${h.uuid}`} className="flex gap-3 px-4 py-2.5 hover:bg-raised">
                           <span className="flex w-16 shrink-0 flex-col gap-0.5 text-xs text-ink-3">
                             <span className="flex items-center gap-1 font-medium text-ink-2">
                               <R.icon className="size-3" aria-hidden />

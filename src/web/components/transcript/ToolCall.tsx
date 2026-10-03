@@ -1,4 +1,4 @@
-import { memo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Bot,
   ChevronRight,
@@ -37,6 +37,13 @@ export interface ToolContext {
   /** viewing a session that lives on another device or in the sync folder: images and full output stay there */
   external?: boolean;
   onOpenSubagent?: (agentId: string) => void;
+  /** lowercased find-in-conversation text; blocks that contain it open up */
+  find?: string;
+}
+
+export function toolHasFind(b: ToolBlock, find: string | undefined): boolean {
+  if (!find) return false;
+  return `${b.name} ${JSON.stringify(b.input ?? '')} ${b.result?.text ?? ''}`.toLowerCase().includes(find);
 }
 
 const ICONS: Record<string, LucideIcon> = {
@@ -266,6 +273,9 @@ function Details({ b, ctx }: { b: ToolBlock; ctx: ToolContext }) {
 
 export const ToolCall = memo(function ToolCall({ b, ctx, defaultOpen = false }: { b: ToolBlock; ctx: ToolContext; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (toolHasFind(b, ctx.find)) setOpen(true);
+  }, [ctx.find, b]);
   const Icon = ICONS[b.name] ?? (b.name.startsWith('mcp__') ? Plug : Wrench);
   const s = toolSummary(b, ctx);
   const r = b.result;

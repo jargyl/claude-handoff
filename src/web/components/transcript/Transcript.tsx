@@ -4,7 +4,7 @@ import type { Block, TranscriptItem } from '../../../shared/types';
 import { compact, duration, time, dayLabel } from '../../lib/format';
 import { renderMarkdown } from '../../lib/markdown';
 import { modelLabel } from '../../../shared/pricing';
-import { ImageThumb, ToolCall, type ToolContext } from './ToolCall';
+import { ImageThumb, ToolCall, toolHasFind, type ToolContext } from './ToolCall';
 import { cx } from '../ui';
 
 type Assistant = Extract<TranscriptItem, { kind: 'assistant' }>;
@@ -133,7 +133,7 @@ function Row({ children, gutter, className, id, highlight }: { children: ReactNo
 }
 
 /** Your prompt text; text you pasted (wrapped by Claude Code in <pasted_content>) gets its own box. */
-function UserText({ text }: { text: string }) {
+function UserText({ text, find }: { text: string; find?: string }) {
   const [more, setMore] = useState(false);
   const segments = useMemo(() => {
     const out: Array<{ pasted: boolean; text: string }> = [];
@@ -150,6 +150,10 @@ function UserText({ text }: { text: string }) {
   }, [text]);
   const plain = segments.map((s) => s.text).join('\n');
   const long = plain.length > 1600 || plain.split('\n').length > 24;
+  // a find match past the cut-off opens the whole prompt
+  useEffect(() => {
+    if (long && find && plain.toLowerCase().indexOf(find) > 1000) setMore(true);
+  }, [find, long, plain]);
   let budget = long && !more ? 1200 : Infinity;
   return (
     <div className="flex flex-col gap-2">
@@ -179,8 +183,14 @@ function UserText({ text }: { text: string }) {
 
 export const plainPromptText = (t: string) => t.replace(/<\/?pasted_content[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
-function Thinking({ b }: { b: Extract<Block, { type: 'thinking' }> }) {
+/** `find` (from ToolContext, already lowercased) occurs in `text`. */
+export const hasFind = (text: string | undefined, find: string | undefined) => !!find && !!text && text.toLowerCase().includes(find);
+
+function Thinking({ b, find }: { b: Extract<Block, { type: 'thinking' }>; find?: string }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (hasFind(b.text, find)) setOpen(true);
+  }, [find, b.text]);
   // Newer models send short progress notes as thinking blocks that took no time: show them as narration.
   if (b.text && !b.redacted && (b.durationMs ?? 0) < 1000 && b.text.length < 1200) {
     return <p className="border-l-2 border-line pl-3 text-base italic leading-[1.6] text-ink-2">{b.text}</p>;
@@ -212,8 +222,9 @@ const AssistantBody = memo(function AssistantBody({ it, ctx, f }: { it: Assistan
     <div className="flex flex-col gap-2">
       {it.blocks.map((b, i) => {
         if (b.type === 'text') return <div key={i} className="prose" dangerouslySetInnerHTML={{ __html: renderMarkdown(b.text) }} />;
-        if (b.type === 'thinking') return f.thinking ? <Thinking key={i} b={b} /> : null;
-        return f.tools ? <ToolCall key={b.id} b={b} ctx={ctx} /> : null;
+        // blocks hidden by the filters still show when they hold what you're finding
+        if (b.type === 'thinking') return f.thinking || hasFind(b.text, ctx.find) ? <Thinking key={i} b={b} find={ctx.find} /> : null;
+        return f.tools || toolHasFind(b, ctx.find) ? <ToolCall key={b.id} b={b} ctx={ctx} /> : null;
       })}
     </div>
   );
@@ -233,11 +244,16 @@ function Activity({ items, ctx, f, id, highlight }: { items: Assistant[]; ctx: T
   const tools = items.flatMap((it) => it.blocks.filter((b): b is Extract<Block, { type: 'tool' }> => b.type === 'tool'));
   const thinking = items.flatMap((it) => it.blocks.filter((b): b is Extract<Block, { type: 'thinking' }> => b.type === 'thinking'));
   const [expanded, setExpanded] = useState(tools.length <= 6);
+  const findTools = tools.some((b) => toolHasFind(b, ctx.find));
+  const findThinking = thinking.filter((b) => hasFind(b.text, ctx.find));
+  useEffect(() => {
+    if (tools.slice(3, -2).some((b) => toolHasFind(b, ctx.find))) setExpanded(true);
+  }, [ctx.find]);
   const first = items[0]!;
   const last = items[items.length - 1]!;
   const span = first.ts && last.ts ? Date.parse(last.ts) - Date.parse(first.ts) : 0;
   const thought = thinking.reduce((n, b) => n + (b.durationMs ?? 0), 0);
-  if (!f.tools) {
+  if (!f.tools && !findTools && !findThinking.length) {
     return (
       <Row id={id} highlight={highlight} gutter={<Gutter ts={first.ts} />} className="py-1.5">
         <p className="flex items-center gap-1.5 text-sm text-ink-3">
@@ -257,6 +273,11 @@ function Activity({ items, ctx, f, id, highlight }: { items: Assistant[]; ctx: T
             Thought for {duration(thought)}
           </p>
         )}
+        {findThinking.map((b, i) => (
+          <div key={`t${i}`} className="px-2">
+            <Thinking b={b} find={ctx.find} />
+          </div>
+        ))}
         {shown.map((b, i) => (
           <div key={b.id}>
             {!expanded && i === 3 && (
@@ -324,7 +345,7 @@ function ItemRow({ it, ctx, f, id, highlight }: { it: TranscriptItem; ctx: ToolC
       return (
         <Row id={id} highlight={highlight} gutter={<Gutter ts={it.ts} who={it.meta ? 'Injected' : 'You'} />}>
           <div className={cx('border-l-[3px] pl-3', it.meta ? 'border-line-strong opacity-80' : 'border-signal')}>
-            {it.text && <UserText text={it.text} />}
+            {it.text && <UserText text={it.text} find={ctx.find} />}
             {it.images.length > 0 && ctx.external && <p className="mt-2 text-xs text-ink-3">{it.images.length} image(s). Pull the session to see them.</p>}
             {it.images.length > 0 && !ctx.external && (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -450,11 +471,27 @@ export const UnitView = memo(function UnitView({ u, ctx, f, highlight }: { u: Un
 });
 
 /** Renders units progressively so huge sessions don't block the first paint. */
-export function TranscriptView({ units, ctx, f, highlightIndex, renderAll }: { units: Unit[]; ctx: ToolContext; f: TranscriptFilters; highlightIndex?: number; renderAll?: boolean }) {
+export function TranscriptView({
+  units,
+  ctx,
+  f,
+  highlightIndex,
+  renderTo,
+  renderAll,
+}: {
+  units: Unit[];
+  ctx: ToolContext;
+  f: TranscriptFilters;
+  highlightIndex?: number;
+  /** a unit you're jumping to: render at least up to it */
+  renderTo?: number;
+  renderAll?: boolean;
+}) {
   const [limit, setLimit] = useState(120);
   useEffect(() => {
-    if (renderAll || (highlightIndex !== undefined && highlightIndex >= limit)) setLimit(units.length);
-  }, [renderAll, highlightIndex, units.length, limit]);
+    const need = Math.max(highlightIndex ?? -1, renderTo ?? -1);
+    if (renderAll || need >= limit) setLimit(units.length);
+  }, [renderAll, highlightIndex, renderTo, units.length, limit]);
   useEffect(() => {
     if (limit >= units.length) return;
     const t = window.setTimeout(() => setLimit((l) => l + 250), 30);
