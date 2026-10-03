@@ -4,7 +4,6 @@
   "description": "A local dashboard for your Claude Code sessions: browse, search and analyze them, and hand them off between machines.",
   "type": "module",
   "private": true,
-  "license": "MIT",
   "bin": {
     "claude-handoff": "bin/claude-handoff.mjs"
   },
