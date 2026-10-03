@@ -220,6 +220,7 @@ export class StagingStore {
       for (const name of names) {
         if (!name.endsWith('.jsonl') || name.startsWith('agent-')) continue;
         const id = name.slice(0, -6);
+        if (!isUuid(id)) continue; // only real session files; also keeps odd names out of path joins
         const mainFile = path.join(projects, dir, name);
         const core = await this.summarize(mainFile);
         const fromManifest = s.manifest.sessions.find((x) => x.id === id);

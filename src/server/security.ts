@@ -55,8 +55,10 @@ const PUBLIC_REMOTE = [/^\/api\/peer\/pair$/, /^\/api\/peer\/hello$/, /^\/api\/a
 
 export function securityMiddleware(settings: SettingsStore, remoteAddr: (c: Context) => string | undefined): MiddlewareHandler {
   return async (c, next) => {
-    const url = new URL(c.req.url);
-    const p = url.pathname;
+    // Decide on the *decoded* path the router dispatches on. The raw URL path
+    // keeps percent-escapes, so "/%61pi/settings" would look like a static asset
+    // here while Hono routes it to /api/settings.
+    const p = c.req.path;
     const method = c.req.method.toUpperCase();
     const mutating = !['GET', 'HEAD', 'OPTIONS'].includes(method);
     const addr = remoteAddr(c);

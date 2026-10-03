@@ -169,9 +169,11 @@ export function buildRewriter(rules: PathRule[]): { rewrite: (s: string) => stri
   }
   const alternation = [...lookup.values()].map((v) => escapeRe(v.text)).join('|');
   // Boundaries: not glued to a preceding letter/digit; followed by a separator,
-  // end of string, a delimiter, or a sentence-ending period.
+  // end of string, a delimiter, or a sentence-ending period. The trailing part of
+  // the path stops at list delimiters (: ; ,) so the next path in a list is
+  // matched on its own instead of being swallowed.
   const re = new RegExp(
-    `(?<![A-Za-z0-9_])(${alternation})(?=$|[\\\\/"'\`\\s:;,)\\]}>|*?]|\\.(?:\\s|$))((?:\\\\\\\\|[\\\\/])[^\\s"'\`<>|*?\\r\\n)\\]}]*)?`,
+    `(?<![A-Za-z0-9_])(${alternation})(?=$|[\\\\/"'\`\\s:;,)\\]}>|*?]|\\.(?:\\s|$))((?:\\\\\\\\|[\\\\/])[^\\s"'\`<>|*?\\r\\n)\\]},;:]*)?`,
     anyWindows ? 'gi' : 'g',
   );
 

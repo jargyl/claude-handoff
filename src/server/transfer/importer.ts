@@ -182,9 +182,9 @@ export class Importer {
     // 5. A project with the same folder name
     const name = basename(srcPath);
     const known = (await index.projectsSummary()).filter((p) => basename(p.path).toLowerCase() === name.toLowerCase() && p.pathExists);
-    if (known.length === 1) return { to: known[0]!.path, reason: `Found a project named ${name}`, exists: true };
+    if (known.length === 1) return { to: known[0]!.path, reason: `Matched by name (${name}). Check it is the same project`, exists: true };
     const found = findByName(name, localHome);
-    if (found) return { to: found, reason: `Found a folder named ${name}`, exists: true };
+    if (found) return { to: found, reason: `Found a folder named ${name}. Check it is the same project`, exists: true };
     // 6. Fall back to the most plausible path, flagged as missing
     if (swapped) return { to: swapped, reason: 'Folder not found on this machine', exists: false };
     return { to: srcPath, reason: 'Folder not found on this machine', exists: dirExists(srcPath) };

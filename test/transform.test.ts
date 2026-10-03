@@ -87,6 +87,27 @@ describe('line transformer', () => {
     expect(u.uuid).not.toBe('11111111-1111-4111-8111-111111111111');
     expect(a.parentUuid).toBe(u.uuid);
   });
+
+  it('copy mode points metadata paths at the copy but leaves the conversation alone', () => {
+    const OLD = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const NEW = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: '33333333-3333-4333-8333-333333333333',
+      sessionId: OLD,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: `saved to C:\\x\\${OLD}\\tool-results\\o.txt` }] },
+      toolUseResult: { persistedOutputPath: `C:\\x\\${OLD}\\tool-results\\o.txt` },
+    });
+    const snap = JSON.stringify({ type: 'file-history-snapshot', messageId: 'm', snapshot: { trackedFileBackups: { [`C:\\tmp\\${OLD}\\scratchpad\\a.mjs`]: { realParentDir: `C:\\tmp\\${OLD}\\scratchpad` } } } });
+    const t = makeTransformer({ rules: [], metadata: false, content: false, copy: { fromId: OLD, toId: NEW, uuidMap: buildUuidMap([line]) } });
+    const o = JSON.parse(t.apply(line));
+    expect(o.toolUseResult.persistedOutputPath).toContain(NEW);
+    expect(o.message.content[0].content).toContain(OLD);
+    const s = JSON.parse(t.apply(snap));
+    const key = Object.keys(s.snapshot.trackedFileBackups)[0]!;
+    expect(key).toContain(NEW);
+    expect(s.snapshot.trackedFileBackups[key].realParentDir).toContain(NEW);
+  });
 });
 
 describe('compareIdentity', () => {

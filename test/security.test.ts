@@ -53,6 +53,13 @@ describe('requests from this machine', () => {
     const devServer = await call('/api/sessions/x/meta', { method: 'PATCH', headers: { origin: 'http://localhost:5173', 'x-handoff': '1' } });
     expect(devServer.status).toBe(200);
   });
+
+  it('applies the write rules to percent-encoded paths too', async () => {
+    const r = await call('/%61pi/settings', { method: 'PATCH', headers: { origin: 'https://evil.example', 'content-type': 'text/plain' } });
+    expect(r.status).toBe(403);
+    const noHeader = await call('/%61pi/settings', { method: 'PATCH', headers: { 'content-type': 'text/plain' } });
+    expect(noHeader.status).toBe(403);
+  });
 });
 
 describe('requests from the network', () => {
@@ -88,6 +95,13 @@ describe('requests from the network', () => {
     expect((await call('/api/imports/x/commit', { method: 'POST', remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/peer/inbox', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
     expect((await call('/api/peer/prefix-hashes', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
+  });
+
+  it("can't sneak past the rules with percent-encoded paths", async () => {
+    const host = '192.168.1.10:7420';
+    expect((await call('/%61pi/settings', { remote, host })).status).toBe(401);
+    expect((await call('/%61pi/settings', { remote, host, headers: { authorization: 'Bearer secret-token-123' } })).status).toBe(403);
+    expect((await call('/%61pi/sessions/x/resume', { method: 'POST', remote, host, headers: { authorization: 'Bearer secret-token-123' } })).status).toBe(403);
   });
 
   it('can pair with a code, without a token', async () => {

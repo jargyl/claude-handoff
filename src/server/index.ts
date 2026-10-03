@@ -214,6 +214,10 @@ async function main() {
   process.on('SIGTERM', shutdown);
 }
 
+// Keep the dashboard up if something unexpected slips through (a file vanishing mid-read, a peer dropping).
+process.on('unhandledRejection', (e: any) => console.error('[handoff] unexpected error:', e?.stack ?? e));
+process.on('uncaughtException', (e: any) => console.error('[handoff] unexpected error:', e?.stack ?? e));
+
 main().catch((e) => {
   console.error(e);
   process.exit(1);

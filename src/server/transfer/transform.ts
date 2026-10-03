@@ -98,9 +98,15 @@ export function makeTransformer(opts: TransformOptions): LineTransformer {
 
   const CONTENT_KEYS = ['message', 'toolUseResult', 'attachment', 'rendered', 'content', 'summary', 'lastPrompt'];
 
+  // Keys whose values are (or feed) the conversation itself. Copy mode leaves the
+  // message untouched entirely, and only swaps whole ids in the rest of these.
+  const CONVERSATION_KEYS = new Set(['attachment', 'rendered', 'content', 'summary', 'lastPrompt']);
+
   const remapIds = (o: any, copy: NonNullable<TransformOptions['copy']>): boolean => {
     let changed = false;
-    const walk = (v: any, depth: number): any => {
+    // metadata strings that embed the old session id (scratchpad, tool-results and
+    // checkpoint paths) are pointed at the copy too
+    const walk = (v: any, depth: number, metadata: boolean): any => {
       if (typeof v === 'string') {
         if (v === copy.fromId) {
           changed = true;
@@ -113,21 +119,32 @@ export function makeTransformer(opts: TransformOptions): LineTransformer {
             return m;
           }
         }
+        if (metadata && v.includes(copy.fromId)) {
+          changed = true;
+          return v.split(copy.fromId).join(copy.toId);
+        }
         return v;
       }
       if (depth > 40 || v === null || typeof v !== 'object') return v;
       if (Array.isArray(v)) {
-        for (let i = 0; i < v.length; i++) v[i] = walk(v[i], depth + 1);
+        for (let i = 0; i < v.length; i++) v[i] = walk(v[i], depth + 1, metadata);
         return v;
       }
       if (v.type === 'thinking' || v.type === 'redacted_thinking') return v;
       for (const k of Object.keys(v)) {
         if (k === 'signature' || (k === 'data' && v.type === 'base64')) continue;
-        v[k] = walk(v[k], depth + 1);
+        if (depth === 0 && k === 'message') continue; // the conversation stays byte-for-byte
+        const nk = metadata && k.includes(copy.fromId) ? k.split(copy.fromId).join(copy.toId) : k;
+        const val = walk(v[k], depth + 1, metadata && !(depth === 0 && CONVERSATION_KEYS.has(k)));
+        if (nk !== k) {
+          delete v[k];
+          changed = true;
+        }
+        v[nk] = val;
       }
       return v;
     };
-    walk(o, 0);
+    walk(o, 0, true);
     return changed;
   };
 

@@ -106,6 +106,16 @@ describe('buildRewriter', () => {
     expect(rewrite('"/home/jari/proj/a"')).toBe('"/home/j/proj/a"');
   });
 
+  it('rewrites every path in a delimited list without mangling the others', () => {
+    const posix = buildRewriter([{ from: '/home/a/app', to: '/home/b/app' }]);
+    expect(posix.rewrite('/home/a/app/x:/home/a/app/y')).toBe('/home/b/app/x:/home/b/app/y');
+    const toWin = buildRewriter([{ from: '/home/a/app', to: 'C:\\Users\\b\\app' }]);
+    expect(toWin.rewrite('/home/a/app/x,/home/a/app/y')).toBe('C:\\Users\\b\\app\\x,C:\\Users\\b\\app\\y');
+    expect(toWin.rewrite('/home/a/app/x,/other/z')).toBe('C:\\Users\\b\\app\\x,/other/z');
+    const win = buildRewriter([{ from: 'C:\\old\\app', to: 'D:\\new\\app' }]);
+    expect(win.rewrite('C:\\old\\app\\src\\a.ts:12:5')).toBe('D:\\new\\app\\src\\a.ts:12:5');
+  });
+
   it('is a no-op without effective rules', () => {
     const { rewrite } = buildRewriter([{ from: 'C:\\a', to: 'c:\\A\\' }]);
     expect(rewrite('C:\\a\\b')).toBe('C:\\a\\b');

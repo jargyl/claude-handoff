@@ -191,6 +191,14 @@ export class SessionIndex extends EventEmitter {
   }
 
   private async refresh(dir: string, id: string): Promise<void> {
+    try {
+      await this.refreshUnsafe(dir, id);
+    } catch (e: any) {
+      console.error('[handoff] refresh failed:', e?.message ?? e);
+    }
+  }
+
+  private async refreshUnsafe(dir: string, id: string): Promise<void> {
     if (id === '*') return this.scanAll(true);
     const file = path.join(this.layout.projects, dir, `${id}.jsonl`);
     let st: fs.Stats | null = null;
@@ -231,9 +239,12 @@ export class SessionIndex extends EventEmitter {
 
   scanAll(quiet = false): Promise<void> {
     if (this.scanning) return this.scanning;
-    this.scanning = this.doScan(quiet).finally(() => {
-      this.scanning = undefined;
-    });
+    // a file can vanish between listing and reading (Claude Code cleanup, moves): never let that crash us
+    this.scanning = this.doScan(quiet)
+      .catch((e) => console.error('[handoff] scan failed:', e?.message ?? e))
+      .finally(() => {
+        this.scanning = undefined;
+      });
     return this.scanning;
   }
 
@@ -250,7 +261,12 @@ export class SessionIndex extends EventEmitter {
     for (const ref of sessions) {
       seen.add(ref.id);
       const prev = this.sessions.get(ref.id);
-      const touched = await this.indexSession(ref, prev);
+      let touched = false;
+      try {
+        touched = await this.indexSession(ref, prev);
+      } catch {
+        continue; // vanished or unreadable right now; the next scan picks it up
+      }
       if (touched) changed.push(ref.id);
       i++;
       if (!quiet && Date.now() - lastEmit > 250) {
