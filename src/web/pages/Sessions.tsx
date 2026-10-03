@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Filter, MessagesSquare, Search, Send, Star, Trash2, X } from 'lucide-react';
@@ -34,17 +34,40 @@ export default function Sessions() {
   const qc = useQueryClient();
   const remote = me.data?.access === 'remote';
 
-  const q = params.get('q') ?? '';
+  // The text filter is local state (typing into a URL-controlled input fights React Router's
+  // transitions); it's mirrored to ?q= shortly after you stop typing.
+  const qParam = params.get('q') ?? '';
+  const [q, setQ] = useState(qParam);
+  const pushedQ = useRef(qParam);
   const project = params.get('project') ?? '';
   const sort = (params.get('sort') as Sort) || 'recent';
   const range = (params.get('range') as Range) || 'all';
   const only = params.get('only') ?? '';
-  const set = (k: string, v: string) => {
-    const next = new URLSearchParams(params);
-    if (v) next.set(k, v);
-    else next.delete(k);
-    setParams(next, { replace: true });
-  };
+  const set = (k: string, v: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (v) next.set(k, v);
+        else next.delete(k);
+        return next;
+      },
+      { replace: true },
+    );
+  useEffect(() => {
+    if (qParam !== pushedQ.current) {
+      pushedQ.current = qParam; // changed from outside (clear filters, back button)
+      setQ(qParam);
+    }
+  }, [qParam]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (q !== pushedQ.current) {
+        pushedQ.current = q;
+        set('q', q);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
 
   const all = sessions.data?.sessions ?? [];
   const projects = useMemo(() => {
@@ -93,7 +116,8 @@ export default function Sessions() {
     });
   const allSelected = filtered.length > 0 && filtered.every((s) => selected.has(s.id));
   const someSelected = filtered.some((s) => selected.has(s.id));
-  const ids = [...selected];
+  // act only on what you can see: a selection hidden by the filters stays out of bulk actions
+  const ids = filtered.filter((s) => selected.has(s.id)).map((s) => s.id);
   const filtersOn = !!(q || project || range !== 'all' || only);
 
   const deleteSelected = async () => {
@@ -130,7 +154,7 @@ export default function Sessions() {
           data-page-search
           icon={Search}
           value={q}
-          onChange={(e) => set('q', e.target.value)}
+          onChange={(e) => setQ(e.target.value)}
           placeholder="Filter by title, prompt, project, branch or id"
           aria-label="Filter sessions"
           className="w-full min-w-[220px] flex-1 sm:w-auto"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Bot, Search, User, Wrench } from 'lucide-react';
 import type { SearchHit } from '../../shared/types';
@@ -41,24 +41,35 @@ export default function SearchPage() {
   const projects = useProjects();
   const res = useSearch({ q, project: project || undefined, role: role || undefined });
 
+  const set = (k: string, v: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (v) next.set(k, v);
+        else next.delete(k);
+        return next;
+      },
+      { replace: true },
+    );
+
+  // The box is local state mirrored to ?q= after a pause; a ?q= set from elsewhere
+  // (the command palette, back/forward) flows back into the box.
+  const pushed = useRef(q);
+  useEffect(() => {
+    if (q !== pushed.current) {
+      pushed.current = q;
+      setInput(q);
+    }
+  }, [q]);
   useEffect(() => {
     const t = setTimeout(() => {
-      if (input !== q) {
-        const next = new URLSearchParams(params);
-        if (input) next.set('q', input);
-        else next.delete('q');
-        setParams(next, { replace: true });
+      if (input !== pushed.current) {
+        pushed.current = input;
+        set('q', input);
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [input, q, params, setParams]);
-
-  const set = (k: string, v: string) => {
-    const next = new URLSearchParams(params);
-    if (v) next.set(k, v);
-    else next.delete(k);
-    setParams(next, { replace: true });
-  };
+  }, [input]);
 
   const grouped = useMemo(() => {
     const m = new Map<string, { title: string; project: string; hits: SearchHit[] }>();

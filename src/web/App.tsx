@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
+import { Component, Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import {
   ChartColumn,
   Cloud,
@@ -7,6 +7,7 @@ import {
   FolderGit2,
   Inbox,
   LayoutDashboard,
+  Lock,
   Menu as MenuIcon,
   MessagesSquare,
   MonitorSmartphone,
@@ -14,6 +15,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sun,
+  TriangleAlert,
   X,
 } from 'lucide-react';
 import { useServerEvents } from './lib/events';
@@ -41,6 +43,58 @@ const SyncPage = lazy(() => import('./pages/SyncPage'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const ExternalTranscript = lazy(() => import('./pages/ExternalTranscript'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+
+/** Pages that hold per-item state get a fresh instance when the item in the URL changes. */
+function SessionRoute() {
+  const { id } = useParams();
+  return <SessionPage key={id} />;
+}
+function ImportRoute() {
+  const { id } = useParams();
+  return <ImportReview key={id} />;
+}
+
+/** Pages that change this computer only make sense on the computer itself. */
+function LocalOnly({ children }: { children: ReactNode }) {
+  const me = useMe();
+  if (me.data?.access === 'remote') {
+    return (
+      <div className="flex flex-col items-center px-6 py-16 text-center">
+        <Lock className="mb-3 size-6 text-ink-3" aria-hidden />
+        <h1 className="text-lg font-semibold">Only on the computer running Handoff</h1>
+        <p className="mt-1 max-w-[48ch] text-base text-ink-2">From another device you can read and search sessions. Moving and importing them happens on the computer itself.</p>
+        <Link to="/" className="mt-5 text-sm font-medium underline decoration-line-strong underline-offset-2">
+          Go to overview
+        </Link>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+/** A crashing page shouldn't take the whole app down. */
+class ErrorBoundary extends Component<{ children: ReactNode; resetKey: string }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidUpdate(prev: { resetKey: string }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="flex flex-col items-center px-6 py-16 text-center">
+        <TriangleAlert className="mb-3 size-6 text-warn" aria-hidden />
+        <h1 className="text-lg font-semibold">This page ran into a problem</h1>
+        <p className="mt-1 max-w-[56ch] font-mono text-sm text-ink-3">{this.state.error.message}</p>
+        <button className="mt-5 text-sm font-medium underline decoration-line-strong underline-offset-2" onClick={() => this.setState({ error: null })}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+}
 
 function NavItem({ to, icon: Icon, children, end, badge }: { to: string; icon: typeof Inbox; children: ReactNode; end?: boolean; badge?: ReactNode }) {
   return (
@@ -226,6 +280,8 @@ export function App() {
 
   useEffect(() => onUnauthorized(() => setNeedsLogin(true)), []);
   useEffect(() => setDrawer(false), [location.pathname]);
+  const remoteRef = useRef(false);
+  remoteRef.current = me.data?.access === 'remote';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -237,6 +293,11 @@ export function App() {
         return;
       }
       if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      // a dialog or the menu drawer owns the keyboard while it's open
+      if (document.querySelector('dialog[open], [data-drawer]')) {
+        if (e.key === 'Escape') setDrawer(false);
+        return;
+      }
       if (e.key === '?') setHelpOpen(true);
       else if (e.key === 't') toggle();
       else if (e.key === '/') {
@@ -246,7 +307,9 @@ export function App() {
         else navigate('/search');
       } else if (e.key === 'g') gPressed.current = Date.now();
       else if (Date.now() - gPressed.current < 1200) {
-        const dest: Record<string, string> = { o: '/', s: '/sessions', p: '/projects', a: '/analytics', i: '/inbox', d: '/devices', f: '/sync', ',': '/settings' };
+        const dest: Record<string, string> = remoteRef.current
+          ? { o: '/', s: '/sessions', p: '/projects', a: '/analytics' }
+          : { o: '/', s: '/sessions', p: '/projects', a: '/analytics', i: '/inbox', d: '/devices', f: '/sync', ',': '/settings' };
         if (dest[e.key]) {
           navigate(dest[e.key]!);
           gPressed.current = 0;
@@ -284,7 +347,7 @@ export function App() {
         </button>
       </div>
       {drawer && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+        <div data-drawer className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-black/40" onClick={() => setDrawer(false)} />
           <div className="absolute inset-y-0 left-0 w-[280px] max-w-[85vw] border-r border-line bg-bg">
             <button aria-label="Close menu" onClick={() => setDrawer(false)} className="absolute right-2 top-3 grid size-8 place-items-center rounded text-ink-3 hover:text-ink">
@@ -303,23 +366,25 @@ export function App() {
               </div>
             }
           >
-            <Routes>
-              <Route path="/" element={<Overview />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/sessions/:id" element={<SessionPage />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/inbox" element={<InboxPage />} />
-              <Route path="/inbox/:id" element={<ImportReview />} />
-              <Route path="/devices" element={<Devices />} />
-              <Route path="/devices/:id" element={<DeviceDetail />} />
-              <Route path="/devices/:id/sessions/:sid" element={<ExternalTranscript source="device" />} />
-              <Route path="/sync" element={<SyncPage />} />
-              <Route path="/sync/sessions/:sid" element={<ExternalTranscript source="sync" />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <ErrorBoundary resetKey={location.pathname}>
+              <Routes>
+                <Route path="/" element={<Overview />} />
+                <Route path="/sessions" element={<Sessions />} />
+                <Route path="/sessions/:id" element={<SessionRoute />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/search" element={<SearchPage />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/inbox" element={<LocalOnly><InboxPage /></LocalOnly>} />
+                <Route path="/inbox/:id" element={<LocalOnly><ImportRoute /></LocalOnly>} />
+                <Route path="/devices" element={<LocalOnly><Devices /></LocalOnly>} />
+                <Route path="/devices/:id" element={<LocalOnly><DeviceDetail /></LocalOnly>} />
+                <Route path="/devices/:id/sessions/:sid" element={<LocalOnly><ExternalTranscript source="device" /></LocalOnly>} />
+                <Route path="/sync" element={<LocalOnly><SyncPage /></LocalOnly>} />
+                <Route path="/sync/sessions/:sid" element={<LocalOnly><ExternalTranscript source="sync" /></LocalOnly>} />
+                <Route path="/settings" element={<LocalOnly><SettingsPage /></LocalOnly>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ErrorBoundary>
           </Suspense>
         </div>
       </main>

@@ -29,8 +29,15 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new ApiError(0, "Can't reach the Handoff server. Is it still running?");
   }
   if (res.status === 401) {
-    unauthorized?.();
-    throw new ApiError(401, 'Access token required');
+    let msg = 'Access token required';
+    try {
+      msg = (await res.clone().json())?.message ?? msg;
+    } catch {
+      /* not json */
+    }
+    // a wrong token on the login screen is an answer, not a reason to show the login screen again
+    if (!path.startsWith('/api/auth/')) unauthorized?.();
+    throw new ApiError(401, msg);
   }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
@@ -79,12 +86,44 @@ export function uploadFile<T>(url: string, file: File, onProgress?: (fraction: n
   });
 }
 
-/** Trigger a browser download for a GET endpoint. */
+/** Trigger a browser download for a GET endpoint (the server sends Content-Disposition). */
 export function download(url: string) {
   const a = document.createElement('a');
   a.href = url;
   a.rel = 'noopener';
+  a.download = '';
   document.body.appendChild(a);
   a.click();
   a.remove();
 }
+
+/** POST a JSON body and save the response as a file; errors come back as ApiError instead of replacing the page. */
+export async function downloadPost(path: string, body: unknown, fallbackName: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, { method: 'POST', headers: { 'x-handoff': '1', 'content-type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(0, "Can't reach the Handoff server. Is it still running?");
+  }
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      msg = (await res.json())?.message ?? msg;
+    } catch {
+      /* not json */
+    }
+    throw new ApiError(res.status, msg);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Path segment for an id that came from the URL. */
+export const seg = (s: string) => encodeURIComponent(s);

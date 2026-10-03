@@ -6,7 +6,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine } from 'lucide-react';
 import type { ImportPlan, Transcript } from '../../shared/types';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, seg } from '../lib/api';
 import { qk, useMe } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { DEFAULT_FILTERS, TranscriptView, buildUnits } from '../components/transcript/Transcript';
@@ -19,7 +19,7 @@ export default function ExternalTranscript({ source }: { source: 'device' | 'syn
   const toast = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const url = source === 'device' ? `/api/devices/${id}/sessions/${sid}/transcript` : `/api/sync/sessions/${sid}/transcript`;
+  const url = source === 'device' ? `/api/devices/${seg(id)}/sessions/${seg(sid)}/transcript` : `/api/sync/sessions/${seg(sid)}/transcript`;
   const t = useQuery({ queryKey: ['external', source, id, sid], queryFn: () => api.get<Transcript>(url), retry: false });
   const units = useMemo(() => buildUnits(t.data?.items ?? [], DEFAULT_FILTERS), [t.data]);
   const firstPrompt = t.data?.items.find((i) => i.kind === 'user' && !i.meta);
@@ -30,7 +30,7 @@ export default function ExternalTranscript({ source }: { source: 'device' | 'syn
     try {
       const plan =
         source === 'device'
-          ? await api.post<ImportPlan>(`/api/devices/${id}/pull`, { ids: [sid] })
+          ? await api.post<ImportPlan>(`/api/devices/${seg(id)}/pull`, { ids: [sid] })
           : (await api.post<{ plan: ImportPlan }>('/api/sync/pull', { ids: [sid] })).plan;
       void qc.invalidateQueries({ queryKey: qk.imports });
       navigate(`/inbox/${plan.id}`);

@@ -283,14 +283,19 @@ export function createApp(ctx: AppContext) {
 
   // ------------------------------------------------------------ export & import
 
-  app.get('/api/export', async (c) => {
-    const list = ids(c.req.query('ids'));
+  const exportBundle = async (c: Context, input: { ids: unknown; fileHistory?: unknown; memory?: unknown }) => {
+    const list = ids(input.ids);
     if (!list.length) throw bad('Pick at least one session to export');
-    const plan = await planBundle(ctx.index, list, ctx.device(), { fileHistory: c.req.query('fileHistory') !== '0', memory: c.req.query('memory') !== '0' });
-    if (!plan.manifest.sessions.length) throw notFound('None of those sessions exist here');
+    const d = ctx.settings.get().importDefaults;
+    const flag = (v: unknown, fallback: boolean) => (v === undefined || v === null || v === '' ? fallback : v !== false && v !== '0' && v !== 'false');
+    const plan = await planBundle(ctx.index, list, ctx.device(), { fileHistory: flag(input.fileHistory, d.includeFileHistory), memory: flag(input.memory, d.includeMemory) });
+    if (!plan.manifest.sessions.length) throw notFound('None of those sessions exist here anymore');
     const name = bundleFileName(plan.manifest.sessions.length, ctx.device().name);
     return c.body(streamBundle(plan), 200, { 'content-type': 'application/zip', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store' });
-  });
+  };
+  // GET for simple links; POST so a large selection doesn't overflow the URL
+  app.get('/api/export', (c) => exportBundle(c, { ids: c.req.query('ids'), fileHistory: c.req.query('fileHistory'), memory: c.req.query('memory') }));
+  app.post('/api/export', async (c) => exportBundle(c, await body<{ ids: string[]; fileHistory?: boolean; memory?: boolean }>(c)));
 
   app.get('/api/imports', async (c) => {
     const list = await ctx.staging.list();

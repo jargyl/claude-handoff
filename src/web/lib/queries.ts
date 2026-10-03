@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from './api';
+import { api, seg } from './api';
 import type {
   DeviceState,
   DiscoveredDevice,
@@ -50,12 +50,12 @@ export const useSessions = () =>
   });
 
 export const useSession = (id: string) =>
-  useQuery({ queryKey: qk.session(id), queryFn: () => api.get<SessionDetail>(`/api/sessions/${id}`), placeholderData: keepPreviousData });
+  useQuery({ queryKey: qk.session(id), queryFn: () => api.get<SessionDetail>(`/api/sessions/${seg(id)}`), placeholderData: keepPreviousData });
 
 export const useTranscript = (id: string, agent?: string) =>
   useQuery({
     queryKey: qk.transcript(id, agent),
-    queryFn: () => api.get<Transcript>(`/api/sessions/${id}/transcript${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`),
+    queryFn: () => api.get<Transcript>(`/api/sessions/${seg(id)}/transcript${agent ? `?agent=${encodeURIComponent(agent)}` : ''}`),
     staleTime: 3_000,
     placeholderData: keepPreviousData,
   });
@@ -107,7 +107,7 @@ export interface InboxItem {
   sessions: Array<{ id: string; title: string; projectPath: string }>;
 }
 export const useImports = () => useQuery({ queryKey: qk.imports, queryFn: () => api.get<{ imports: InboxItem[] }>('/api/imports') });
-export const usePlan = (id: string) => useQuery({ queryKey: qk.plan(id), queryFn: () => api.get<ImportPlan>(`/api/imports/${id}`), retry: false });
+export const usePlan = (id: string) => useQuery({ queryKey: qk.plan(id), queryFn: () => api.get<ImportPlan>(`/api/imports/${seg(id)}`), retry: false });
 export const useHistory = () => useQuery({ queryKey: qk.history, queryFn: () => api.get<{ history: HistoryEntry[] }>('/api/history') });
 
 export interface DevicesResponse {
@@ -116,8 +116,9 @@ export interface DevicesResponse {
   pairing: { code: string; expiresAt: number } | null;
   lan: { enabled: boolean; urls: string[]; acceptPush: boolean; discovery: boolean };
 }
-export const useDevices = () =>
-  useQuery({ queryKey: qk.devices, queryFn: () => api.get<DevicesResponse>('/api/devices'), refetchInterval: 8_000 });
+/** Polls while shown: each poll checks whether paired devices are reachable. */
+export const useDevices = (enabled = true) =>
+  useQuery({ queryKey: qk.devices, queryFn: () => api.get<DevicesResponse>('/api/devices'), refetchInterval: enabled ? 8_000 : false, enabled });
 
 export interface DeviceSessionsResponse {
   device: { id: string; name: string; url: string };
@@ -125,9 +126,10 @@ export interface DeviceSessionsResponse {
   pushable: Array<{ id: string; status: SyncStatus }>;
 }
 export const useDeviceSessions = (id: string) =>
-  useQuery({ queryKey: qk.deviceSessions(id), queryFn: () => api.get<DeviceSessionsResponse>(`/api/devices/${id}/sessions`), retry: false, refetchInterval: 15_000 });
+  useQuery({ queryKey: qk.deviceSessions(id), queryFn: () => api.get<DeviceSessionsResponse>(`/api/devices/${seg(id)}/sessions`), retry: false, refetchInterval: 15_000 });
 
-export const useSync = () => useQuery({ queryKey: qk.sync, queryFn: () => api.get<SyncState>('/api/sync'), refetchInterval: 20_000 });
+export const useSync = (enabled = true) =>
+  useQuery({ queryKey: qk.sync, queryFn: () => api.get<SyncState>('/api/sync'), refetchInterval: enabled ? 20_000 : false, enabled });
 
 export interface SettingsResponse {
   settings: Settings;
@@ -165,7 +167,7 @@ export function useSessionMeta() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...patch }: { id: string; title?: string; starred?: boolean; tags?: string[]; note?: string }) =>
-      api.patch<SessionListItem>(`/api/sessions/${id}/meta`, patch),
+      api.patch<SessionListItem>(`/api/sessions/${seg(id)}/meta`, patch),
     onMutate: async ({ id, ...patch }) => {
       // optimistic star/title updates in the list
       qc.setQueryData<{ sessions: SessionListItem[]; status: IndexStatus }>(qk.sessions, (old) =>

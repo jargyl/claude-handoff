@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from 'react';
+import { memo, useRef, useState, type ReactNode } from 'react';
 import {
   Bot,
   ChevronRight,
@@ -15,6 +15,7 @@ import {
   Search,
   SquareTerminal,
   Wrench,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import type { Block, ToolResult } from '../../../shared/types';
@@ -157,18 +158,29 @@ function ResultImages({ result, ctx }: { result: ToolResult; ctx: ToolContext })
   );
 }
 
+/** Thumbnail that opens full size in a native modal (Escape closes it, focus is trapped and restored). */
 export function ImageThumb({ src }: { src: string }) {
-  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDialogElement>(null);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="overflow-hidden rounded-[6px] border border-line bg-raised hover:border-ink-3" aria-label="Open image">
+      <button onClick={() => ref.current?.showModal()} className="overflow-hidden rounded-[6px] border border-line bg-raised hover:border-ink-3" aria-label="Open image">
         <img src={src} loading="lazy" alt="" className="block max-h-48 max-w-[320px] object-contain" />
       </button>
-      {open && (
-        <div role="dialog" aria-modal="true" aria-label="Image" className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-6" onClick={() => setOpen(false)}>
-          <img src={src} alt="" className="max-h-full max-w-full rounded-[6px] shadow-2xl" />
-        </div>
-      )}
+      <dialog
+        ref={ref}
+        aria-label="Image"
+        onClick={(e) => e.target === ref.current && ref.current?.close()}
+        className="m-auto max-h-[92vh] max-w-[94vw] overflow-visible bg-transparent p-0 backdrop:bg-black/75"
+      >
+        <img src={src} alt="" className="block max-h-[90vh] max-w-[92vw] rounded-[6px] shadow-2xl" />
+        <button
+          onClick={() => ref.current?.close()}
+          aria-label="Close image"
+          className="absolute -right-3 -top-3 grid size-8 place-items-center rounded-full border border-line bg-raised text-ink shadow-[var(--shadow)]"
+        >
+          <X className="size-4" />
+        </button>
+      </dialog>
     </>
   );
 }
@@ -228,6 +240,7 @@ function Details({ b, ctx }: { b: ToolBlock; ctx: ToolContext }) {
       parts.push(
         <div key="res">
           {r.text && <div className="prose max-h-[420px] overflow-auto rounded-[6px] border border-line bg-raised px-3 py-2 text-sm scroll-thin" dangerouslySetInnerHTML={{ __html: renderMarkdown(r.text) }} />}
+          <FullOutput result={r} toolId={b.id} ctx={ctx} />
           {agentId && ctx.onOpenSubagent && (
             <Button size="sm" className="mt-2" icon={Bot} onClick={() => ctx.onOpenSubagent!(agentId)}>
               Open the agent's transcript

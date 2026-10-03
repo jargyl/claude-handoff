@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FolderOpen, Info, Keyboard, Trash2, Undo2 } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
@@ -37,12 +37,17 @@ export default function Settings() {
   const [help, setHelp] = useState(false);
   const s = settings.data?.settings;
 
+  // Take new server values only for fields you haven't edited: toggling a switch
+  // refetches settings and mustn't wipe a half-typed name or price list.
+  const lastServer = useRef<{ name: string; dir: string; prices: string } | null>(null);
   useEffect(() => {
-    if (s) {
-      setName(s.deviceName);
-      setClaudeDir(s.claudeDir ?? '');
-      setPrices(Object.keys(s.pricingOverrides).length ? JSON.stringify(s.pricingOverrides, null, 2) : '');
-    }
+    if (!s) return;
+    const next = { name: s.deviceName, dir: s.claudeDir ?? '', prices: Object.keys(s.pricingOverrides).length ? JSON.stringify(s.pricingOverrides, null, 2) : '' };
+    const prev = lastServer.current;
+    if (!prev || name === prev.name) setName(next.name);
+    if (!prev || claudeDir === prev.dir) setClaudeDir(next.dir);
+    if (!prev || prices === prev.prices) setPrices(next.prices);
+    lastServer.current = next;
   }, [s]);
 
   if (!s || !settings.data) {

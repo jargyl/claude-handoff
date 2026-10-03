@@ -22,10 +22,11 @@ function Tile({ label, value, trend, sub }: { label: string; value: string; tren
 
 export default function Overview() {
   const me = useMe();
+  const local = me.data?.access === 'local';
   const sessions = useSessions();
   const imports = useImports();
-  const sync = useSync();
-  const devices = useDevices();
+  const sync = useSync(local);
+  const devices = useDevices(local);
   const navigate = useNavigate();
   const to = localDateKey(new Date());
   const stats = useStats({ from: addDaysKey(to, -29), to });

@@ -1,20 +1,41 @@
 // "Hand off": send selected sessions to another machine — as a file, straight to
 // a paired device, or into the sync folder.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Cloud, Download, MonitorSmartphone, Send } from 'lucide-react';
-import { api, ApiError, download } from '../lib/api';
-import { qk, useDevices, useSync } from '../lib/queries';
+import { Cloud, Download, MonitorSmartphone, type LucideIcon } from 'lucide-react';
+import { api, ApiError, downloadPost, seg } from '../lib/api';
+import { qk, useDevices, useMe, useSync } from '../lib/queries';
 import { plural, relative } from '../lib/format';
 import { useToast } from '../lib/toast';
 import { Dialog } from './Dialog';
-import { Button, Spinner, cx } from './ui';
+import { Spinner } from './ui';
+
+function Option({ icon: Icon, title, desc, onClick, disabled, busy }: { icon: LucideIcon; title: string; desc: ReactNode; onClick: () => void; disabled?: boolean; busy?: boolean }) {
+  return (
+    <li>
+      <button
+        disabled={disabled}
+        onClick={onClick}
+        className="flex w-full items-center gap-3 rounded-[8px] border border-line bg-raised px-3.5 py-3 text-left transition-colors hover:border-ink-3 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-[7px] border border-line bg-surface text-ink-2">{busy ? <Spinner /> : <Icon className="size-4" aria-hidden />}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-ink">{title}</span>
+          <span className="block text-sm text-ink-3">{desc}</span>
+        </span>
+      </button>
+    </li>
+  );
+}
 
 export function HandoffDialog({ ids, open, onClose, onDone }: { ids: string[]; open: boolean; onClose: () => void; onDone?: () => void }) {
-  const devices = useDevices();
-  const sync = useSync();
+  const me = useMe();
+  const local = me.data?.access === 'local';
+  // only ask about devices and the sync folder while the dialog is open
+  const devices = useDevices(open && local);
+  const sync = useSync(open && local);
   const toast = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
@@ -33,64 +54,48 @@ export function HandoffDialog({ ids, open, onClose, onDone }: { ids: string[]; o
     }
   };
 
-  const Row = ({ id, icon: Icon, title, desc, action, disabled }: { id: string; icon: typeof Send; title: string; desc: React.ReactNode; action: () => void; disabled?: boolean }) => (
-    <li>
-      <button
-        disabled={disabled || !!busy}
-        onClick={action}
-        className={cx('flex w-full items-center gap-3 rounded-[8px] border border-line bg-raised px-3.5 py-3 text-left transition-colors hover:border-ink-3 disabled:cursor-not-allowed disabled:opacity-50')}
-      >
-        <span className="grid size-9 shrink-0 place-items-center rounded-[7px] border border-line bg-surface text-ink-2">
-          {busy === id ? <Spinner /> : <Icon className="size-4" aria-hidden />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium text-ink">{title}</span>
-          <span className="block text-sm text-ink-3">{desc}</span>
-        </span>
-      </button>
-    </li>
-  );
-
   const paired = devices.data?.devices ?? [];
 
   return (
     <Dialog open={open} onClose={onClose} title={`Hand off ${plural(n, 'session')}`} description="Pick how to get them to your other machine. You'll review where they go over there.">
       <ul className="flex flex-col gap-2">
-        <Row
-          id="zip"
+        <Option
           icon={Download}
           title="Download a bundle (.zip)"
           desc="Move it however you like: USB stick, email, chat. Drop it on Handoff on the other machine."
-          action={() =>
+          busy={busy === 'zip'}
+          disabled={!!busy}
+          onClick={() =>
             run('zip', async () => {
-              download(`/api/export?ids=${ids.join(',')}`);
-              toast({ tone: 'success', message: `Downloading ${plural(n, 'session')}` });
+              await downloadPost('/api/export', { ids }, 'claude-sessions.zip');
+              toast({ tone: 'success', message: `Saved ${plural(n, 'session')} as a bundle` });
             })
           }
         />
         {paired.map((d) => (
-          <Row
+          <Option
             key={d.id}
-            id={d.id}
             icon={MonitorSmartphone}
             title={`Send to ${d.name}`}
-            disabled={!d.online}
+            disabled={!d.online || !!busy}
+            busy={busy === d.id}
             desc={d.online ? 'Lands in its inbox, ready to review' : (d.error ?? 'Offline')}
-            action={() =>
+            onClick={() =>
               run(d.id, async () => {
-                const r = await api.post<{ sessions: number; device: string }>(`/api/devices/${d.id}/push`, { ids });
+                const r = await api.post<{ sessions: number; device: string }>(`/api/devices/${seg(d.id)}/push`, { ids });
                 toast({ tone: 'success', message: `Sent ${plural(r.sessions, 'session')} to ${r.device}. Open its inbox to finish.` });
               })
             }
           />
         ))}
         {sync.data?.folder ? (
-          <Row
-            id="sync"
+          <Option
             icon={Cloud}
             title="Copy to the sync folder"
             desc={`${sync.data.folder}${sync.data.lastPushAt ? ` · last copy ${relative(sync.data.lastPushAt)}` : ''}`}
-            action={() =>
+            busy={busy === 'sync'}
+            disabled={!!busy}
+            onClick={() =>
               run('sync', async () => {
                 const r = await api.post<{ pushed: string[]; skipped: Array<{ id: string; reason: string }> }>('/api/sync/push', { ids });
                 void qc.invalidateQueries({ queryKey: qk.sync });
@@ -101,7 +106,7 @@ export function HandoffDialog({ ids, open, onClose, onDone }: { ids: string[]; o
           />
         ) : null}
       </ul>
-      {(!paired.length || !sync.data?.folder) && (
+      {local && (!paired.length || !sync.data?.folder) && (
         <p className="mt-4 text-sm text-ink-3">
           {!paired.length && (
             <>

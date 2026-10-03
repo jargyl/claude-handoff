@@ -15,7 +15,7 @@ import {
   TextSearch,
   type LucideIcon,
 } from 'lucide-react';
-import { useSessions } from '../lib/queries';
+import { useMe, useSessions } from '../lib/queries';
 import { useTheme } from '../lib/theme';
 import { relative, shortId } from '../lib/format';
 import { LiveDot, cx } from './ui';
@@ -37,6 +37,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const input = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const sessions = useSessions();
+  const me = useMe();
+  const remote = me.data?.access === 'remote';
   const { toggle } = useTheme();
 
   useEffect(() => {
@@ -60,10 +62,14 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: 'p-sessions', label: 'Sessions', icon: MessagesSquare, group: 'Go to', run: go('/sessions') },
       { id: 'p-projects', label: 'Projects', icon: FolderGit2, group: 'Go to', run: go('/projects') },
       { id: 'p-analytics', label: 'Analytics', icon: ChartColumn, group: 'Go to', run: go('/analytics') },
-      { id: 'p-inbox', label: 'Inbox: import sessions', icon: Inbox, group: 'Go to', run: go('/inbox') },
-      { id: 'p-devices', label: 'Devices', icon: MonitorSmartphone, group: 'Go to', run: go('/devices') },
-      { id: 'p-sync', label: 'Sync folder', icon: Cloud, group: 'Go to', run: go('/sync') },
-      { id: 'p-settings', label: 'Settings', icon: Settings, group: 'Go to', run: go('/settings') },
+      ...(remote
+        ? []
+        : [
+            { id: 'p-inbox', label: 'Inbox: import sessions', icon: Inbox, group: 'Go to' as const, run: go('/inbox') },
+            { id: 'p-devices', label: 'Devices', icon: MonitorSmartphone, group: 'Go to' as const, run: go('/devices') },
+            { id: 'p-sync', label: 'Sync folder', icon: Cloud, group: 'Go to' as const, run: go('/sync') },
+            { id: 'p-settings', label: 'Settings', icon: Settings, group: 'Go to' as const, run: go('/settings') },
+          ]),
     ];
     const actions: Item[] = [
       {
@@ -101,11 +107,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const filterStatic = (arr: Item[]) => (words.length ? arr.filter((i) => match(i.label.toLowerCase())) : arr);
     const searchAll: Item[] = q.trim().length >= 2 ? [{ id: 'a-search', label: `Search every transcript for “${q.trim()}”`, icon: TextSearch, group: 'Actions', run: go(`/search?q=${encodeURIComponent(q.trim())}`) }] : [];
     return [...sess, ...searchAll, ...filterStatic(pages), ...filterStatic(actions)];
-  }, [q, sessions.data, navigate, onClose, toggle]);
+  }, [q, sessions.data, navigate, onClose, toggle, remote]);
 
   useEffect(() => setActive(0), [q]);
 
-  const onKey = (e: React.KeyboardEvent) => {
+  // only the search box drives the list; a focused option handles its own Enter
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((a) => Math.min(items.length - 1, a + 1));
@@ -130,7 +137,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       className="mx-auto mt-[12vh] w-[calc(100vw-2rem)] max-w-[620px] rounded-[12px] border border-line bg-surface p-0 shadow-[var(--shadow)]"
     >
       {open && (
-        <div onKeyDown={onKey}>
+        <div>
           <div className="flex items-center gap-2.5 border-b border-line px-4">
             <Search className="size-4 text-ink-3" aria-hidden />
             <input
@@ -138,18 +145,23 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Find a session, page or action"
-              aria-label="Command"
+              aria-label="Find a session, page or action"
+              role="combobox"
+              aria-expanded="true"
+              aria-controls="palette-list"
+              aria-activedescendant={items[active] ? `palette-${items[active]!.id}` : undefined}
+              onKeyDown={onKey}
               className="h-12 flex-1 bg-transparent text-md text-ink placeholder:text-ink-3 focus:outline-none"
             />
           </div>
-          <ul role="listbox" className="max-h-[55vh] overflow-y-auto p-1.5 scroll-thin">
+          <ul id="palette-list" role="listbox" aria-label="Results" className="max-h-[55vh] overflow-y-auto p-1.5 scroll-thin">
             {items.length === 0 && <li className="px-3 py-6 text-center text-sm text-ink-3">Nothing matches “{q}”.</li>}
             {items.map((it, i) => {
               const header = it.group !== lastGroup ? it.group : null;
               lastGroup = it.group;
               const Icon = it.icon;
               return (
-                <li key={it.id} role="option" aria-selected={i === active}>
+                <li key={it.id} id={`palette-${it.id}`} role="option" aria-selected={i === active}>
                   {header && <p className="px-2.5 pb-1 pt-2.5 text-xs font-medium text-ink-3">{header}</p>}
                   <button
                     onMouseMove={() => setActive(i)}

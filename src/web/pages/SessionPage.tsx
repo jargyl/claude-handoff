@@ -347,7 +347,10 @@ function DetailsTab({ s, home }: { s: SessionDetail; home: string }) {
             className="mt-2"
             value={tags}
             onChange={(e) => setTags(e.target.value)}
-            onBlur={() => meta.mutate({ id: s.id, tags: tags.split(',').map((t) => t.trim()).filter(Boolean) })}
+            onBlur={() => {
+              const next = tags.split(',').map((t) => t.trim()).filter(Boolean);
+              if (next.join(',') !== s.tags.join(',')) meta.mutate({ id: s.id, tags: next });
+            }}
             placeholder="Tags, separated by commas"
             aria-label="Tags"
           />
@@ -434,16 +437,17 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     return units.map((u, i) => (unitText(u).toLowerCase().includes(q) ? i : -1)).filter((i) => i >= 0);
   }, [units, find]);
 
+  /** Matches are centered; prompts go to the top so the outline and J/K agree on which one is current. */
   const scrollToUnit = useCallback(
-    (i: number) => {
-      setHighlight(i);
+    (i: number, block: ScrollLogicalPosition = 'center') => {
+      setHighlight(block === 'center' ? i : undefined);
       const u = units[i];
       if (!u) return;
       const id = `m-${unitUuids(u)[0]}`;
       let tries = 0;
       const go = () => {
         const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (el) el.scrollIntoView({ block, behavior: 'smooth' });
         else if (tries++ < 20) requestAnimationFrame(go);
       };
       requestAnimationFrame(go);
@@ -451,11 +455,18 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     [units],
   );
 
+  // New search text jumps to the first match; new messages arriving (live) keep your place.
+  const lastFind = useRef('');
   useEffect(() => {
-    setPos(0);
-    if (matches.length) scrollToUnit(matches[0]!);
-    else setHighlight(undefined);
-  }, [matches, scrollToUnit]);
+    if (find !== lastFind.current) {
+      lastFind.current = find;
+      setPos(0);
+      if (matches.length) scrollToUnit(matches[0]!);
+      else setHighlight(undefined);
+    } else if (pos >= matches.length) {
+      setPos(Math.max(0, matches.length - 1));
+    }
+  }, [matches, find]);
 
   // Jump to #m-<uuid> (links from search results)
   const jumped = useRef<string | null>(null);
@@ -469,18 +480,24 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     }
   }, [location.hash, units, scrollToUnit]);
 
-  // Follow live sessions when scrolled to the bottom
+  // Follow live sessions only while the end of the conversation is on screen. A sentinel
+  // after the last message tells us; it stays accurate as content grows, unlike scroll events.
   const atBottom = useRef(false);
   const [newBelow, setNewBelow] = useState(false);
-  useEffect(() => {
-    const onScroll = () => {
-      atBottom.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240;
-      if (atBottom.current) setNewBelow(false);
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const sentinel = useCallback((el: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    if (!el) return;
+    observer.current = new IntersectionObserver(
+      ([e]) => {
+        atBottom.current = !!e?.isIntersecting;
+        if (e?.isIntersecting) setNewBelow(false);
+      },
+      { rootMargin: '0px 0px 240px 0px' },
+    );
+    observer.current.observe(el);
   }, []);
+  useEffect(() => () => observer.current?.disconnect(), []);
   const count = t.data?.items.length ?? 0;
   const prevCount = useRef(count);
   useLayoutEffect(() => {
@@ -523,9 +540,14 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (document.querySelector('dialog[open]')) return;
       if (e.key === 'j' || e.key === 'k') {
-        const next = Math.max(0, Math.min(prompts.length - 1, active + (e.key === 'j' ? 1 : -1)));
-        if (prompts[next]) scrollToUnit(prompts[next]!.i);
+        // before the first prompt reaches the top, J goes to the first one
+        const firstEl = prompts[0] ? document.getElementById(`m-${prompts[0].uuid}`) : null;
+        const beforeFirst = !!firstEl && firstEl.getBoundingClientRect().top > 160;
+        const next = e.key === 'j' ? (beforeFirst ? 0 : active + 1) : active - 1;
+        const target = prompts[Math.max(0, Math.min(prompts.length - 1, next))];
+        if (target) scrollToUnit(target.i, 'start');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -541,7 +563,8 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
       </div>
     );
   }
-  if (t.error) return <Callout tone="warn" title="Couldn't load the conversation">{(t.error as Error).message}</Callout>;
+  // a failed background refresh keeps what's on screen
+  if (t.error && !t.data) return <Callout tone="warn" title="Couldn't load the conversation">{(t.error as Error).message}</Callout>;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
@@ -568,8 +591,9 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
         {units.length === 0 ? (
           <EmptyState icon={MessagesSquare} title="Nothing to show yet">This conversation has no messages, or they're all hidden by the filters above.</EmptyState>
         ) : (
-          <TranscriptView units={units} ctx={ctx} f={f} highlightIndex={highlight} renderAll={!!find} />
+          <TranscriptView units={units} ctx={ctx} f={f} highlightIndex={highlight} renderAll={find.trim().length >= 2} />
         )}
+        <div ref={sentinel} aria-hidden className="h-px" />
         {s.live && !agent && (
           <p className="mt-4 flex items-center gap-2 px-2 text-sm text-ink-3">
             <LiveDot status={s.live.status} />
@@ -591,7 +615,7 @@ function Conversation({ s, agent, home, onOpenSubagent }: { s: SessionDetail; ag
             <ol className="flex flex-col border-l border-line">
               {prompts.map((p, k) => (
                 <li key={p.uuid}>
-                  <button onClick={() => scrollToUnit(p.i)} className={cx('-ml-px block w-full border-l-2 py-1.5 pl-3 text-left text-sm', k === active ? 'border-signal-line text-ink' : 'border-transparent text-ink-3 hover:text-ink-2')}>
+                  <button onClick={() => scrollToUnit(p.i, 'start')} className={cx('-ml-px block w-full border-l-2 py-1.5 pl-3 text-left text-sm', k === active ? 'border-signal-line text-ink' : 'border-transparent text-ink-3 hover:text-ink-2')}>
                     <span className="line-clamp-2">{p.text.slice(0, 160)}</span>
                     <span className="tnum text-xs text-ink-3">{time(p.ts)}</span>
                   </button>
@@ -639,7 +663,7 @@ export default function SessionPage() {
       </div>
     );
   }
-  if (session.error || !session.data) {
+  if (!session.data) {
     return (
       <EmptyState
         icon={MessagesSquare}

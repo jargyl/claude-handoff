@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowUpFromLine, Eye, MonitorSmartphone, RefreshCw, Search } from 'lucide-react';
 import type { ImportPlan, SyncStatus } from '../../shared/types';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, seg } from '../lib/api';
 import { qk, useDeviceSessions, useDevices, useSessions } from '../lib/queries';
 import { bytes, plural, relative, shortId } from '../lib/format';
 import { useToast } from '../lib/toast';
@@ -63,7 +63,7 @@ export default function DeviceDetail() {
   const pull = async () => {
     setBusy(true);
     try {
-      const plan = await api.post<ImportPlan>(`/api/devices/${id}/pull`, { ids });
+      const plan = await api.post<ImportPlan>(`/api/devices/${seg(id)}/pull`, { ids });
       void qc.invalidateQueries({ queryKey: qk.imports });
       navigate(`/inbox/${plan.id}`);
     } catch (e) {
@@ -75,7 +75,7 @@ export default function DeviceDetail() {
   const send = async () => {
     setBusy(true);
     try {
-      const r = await api.post<{ sessions: number; device: string }>(`/api/devices/${id}/push`, { ids });
+      const r = await api.post<{ sessions: number; device: string }>(`/api/devices/${seg(id)}/push`, { ids });
       toast({ tone: 'success', message: `Sent ${plural(r.sessions, 'session')} to ${r.device}. Finish the import in its inbox.` });
       setSelected(new Set());
     } catch (e) {

@@ -121,6 +121,12 @@ md.use({
       // raw HTML in a transcript is shown, not rendered
       return escapeHtml(text);
     },
+    image({ href, text }) {
+      // Never load remote images: opening a session must not make requests to
+      // hosts named in it (a prompt-injected reply could leak data that way).
+      const label = escapeHtml(text || 'image');
+      return href ? `<a href="${escapeHtml(href)}">[image: ${label}]</a>` : `[image: ${label}]`;
+    },
   },
 });
 
@@ -136,7 +142,10 @@ const cache = new Map<string, string>();
 export function renderMarkdown(src: string): string {
   const hit = cache.get(src);
   if (hit !== undefined) return hit;
-  const html = DOMPurify.sanitize(md.parse(src, { async: false }) as string, { FORBID_TAGS: ['style', 'form', 'input', 'iframe'], FORBID_ATTR: ['style'] });
+  const html = DOMPurify.sanitize(md.parse(src, { async: false }) as string, {
+    FORBID_TAGS: ['style', 'form', 'input', 'iframe', 'img', 'picture', 'source', 'video', 'audio', 'object', 'embed', 'link', 'meta'],
+    FORBID_ATTR: ['style', 'srcset', 'background', 'poster'],
+  });
   if (cache.size > 2000) cache.clear();
   cache.set(src, html);
   return html;

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, CircleAlert, CircleCheck, CircleX, FolderCheck, FolderOpen, FolderX, Inbox, Play, Undo2 } from 'lucide-react';
 import type { ImportAction, ImportOptions, ImportPlan, ImportResult } from '../../shared/types';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, seg } from '../lib/api';
 import { qk, useMe, usePlan, useSettings } from '../lib/queries';
 import { bytes, plural, relative } from '../lib/format';
 import { useToast } from '../lib/toast';
@@ -199,7 +199,7 @@ export default function ImportReview() {
     const mine = ++seq.current;
     setRefreshing(true);
     try {
-      const p = await api.post<ImportPlan>(`/api/imports/${id}/plan`, { mappings: next });
+      const p = await api.post<ImportPlan>(`/api/imports/${seg(id)}/plan`, { mappings: next });
       if (mine !== seq.current) return;
       setPlan(p);
       setActions((prev) => Object.fromEntries(p.candidates.map((c) => [c.session.id, c.allowedActions.includes(prev[c.session.id]!) ? prev[c.session.id]! : c.suggestedAction])));
@@ -343,7 +343,7 @@ export default function ImportReview() {
         <Button
           variant="ghost"
           onClick={async () => {
-            await api.del(`/api/imports/${id}`);
+            await api.del(`/api/imports/${seg(id)}`);
             void qc.invalidateQueries({ queryKey: qk.imports });
             navigate('/inbox');
           }}
@@ -357,7 +357,7 @@ export default function ImportReview() {
           onClick={async () => {
             setCommitting(true);
             try {
-              const r = await api.post<ImportResult>(`/api/imports/${id}/commit`, { mappings, actions, options });
+              const r = await api.post<ImportResult>(`/api/imports/${seg(id)}/commit`, { mappings, actions, options });
               setResult(r);
               void qc.invalidateQueries({ queryKey: qk.sessions });
               void qc.invalidateQueries({ queryKey: qk.imports });
