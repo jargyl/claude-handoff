@@ -379,6 +379,7 @@ export interface ImportRequest {
 
 export interface ImportResultItem {
   sessionId: string;
+  title: string;
   action: ImportAction;
   ok: boolean;
   error?: string;

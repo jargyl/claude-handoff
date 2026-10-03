@@ -325,7 +325,8 @@ function ItemRow({ it, ctx, f, id, highlight }: { it: TranscriptItem; ctx: ToolC
         <Row id={id} highlight={highlight} gutter={<Gutter ts={it.ts} who={it.meta ? 'Injected' : 'You'} />}>
           <div className={cx('border-l-[3px] pl-3', it.meta ? 'border-line-strong opacity-80' : 'border-signal')}>
             {it.text && <UserText text={it.text} />}
-            {it.images.length > 0 && (
+            {it.images.length > 0 && ctx.external && <p className="mt-2 text-xs text-ink-3">{it.images.length} image(s). Pull the session to see them.</p>}
+            {it.images.length > 0 && !ctx.external && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {it.images.map((img) => (
                   <ImageThumb key={img.ref} src={`/api/sessions/${ctx.sessionId}/image/${encodeURIComponent(img.ref)}${ctx.agent ? `?agent=${ctx.agent}` : ''}`} />

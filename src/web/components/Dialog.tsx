@@ -23,8 +23,11 @@ export function Dialog({
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    else if (!open && d.open) d.close();
+    if (open && !d.open) {
+      d.showModal();
+      // showModal focuses the first focusable element (the close button); prefer the first field
+      requestAnimationFrame(() => d.querySelector<HTMLElement>('[data-autofocus], input:not([type=hidden]):not([type=checkbox]), textarea')?.focus());
+    } else if (!open && d.open) d.close();
   }, [open]);
   const width = { sm: 'max-w-[420px]', md: 'max-w-[560px]', lg: 'max-w-[760px]', xl: 'max-w-[1000px]' }[size];
   return (

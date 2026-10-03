@@ -50,7 +50,8 @@ export class PeerClient {
       const res = await fetch(`${this.url}${path}`, {
         ...init,
         signal: ctrl.signal,
-        headers: { ...(this.token ? { authorization: `Bearer ${this.token}` } : {}), ...(init.headers ?? {}) },
+        // x-handoff marks this as a deliberate client call (the other side rejects state changes without it)
+        headers: { 'x-handoff': '1', ...(this.token ? { authorization: `Bearer ${this.token}` } : {}), ...(init.headers ?? {}) },
       });
       if (!res.ok) {
         let msg = `${res.status} ${res.statusText}`;

@@ -11,6 +11,8 @@
 
 import crypto from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
+
+const deny = (c: Context, status: 401 | 403, message: string) => c.json({ error: status === 401 ? 'unauthorized' : 'forbidden', message }, status);
 import { getCookie } from 'hono/cookie';
 import type { SettingsStore } from './config.js';
 
@@ -64,7 +66,7 @@ export function securityMiddleware(settings: SettingsStore, remoteAddr: (c: Cont
     if (local) {
       if (!LOOPBACK_HOSTS.has(hostName(host))) {
         // A browser on this machine reaching us through another hostname: only OK with LAN sharing + token
-        if (!settings.get().lan.enabled) return c.text('Forbidden host', 403);
+        if (!settings.get().lan.enabled) return deny(c, 403, 'This address is not allowed. Open Handoff via localhost, or turn on network sharing.');
       } else {
         c.set('access', 'local');
         if (mutating && p.startsWith('/api/')) {
@@ -74,11 +76,11 @@ export function securityMiddleware(settings: SettingsStore, remoteAddr: (c: Cont
             try {
               oh = hostName(new URL(origin).host);
             } catch {
-              return c.text('Bad origin', 403);
+              return deny(c, 403, 'Bad origin');
             }
-            if (!LOOPBACK_HOSTS.has(oh)) return c.text('Cross-origin request blocked', 403);
+            if (!LOOPBACK_HOSTS.has(oh)) return deny(c, 403, 'Cross-origin request blocked');
           }
-          if (!c.req.header('x-handoff') && !c.req.header('authorization')) return c.text('Missing X-Handoff header', 403);
+          if (!c.req.header('x-handoff') && !c.req.header('authorization')) return deny(c, 403, 'Missing X-Handoff header');
         }
         return next();
       }
@@ -86,26 +88,26 @@ export function securityMiddleware(settings: SettingsStore, remoteAddr: (c: Cont
 
     // ---- remote
     const s = settings.get();
-    if (!s.lan.enabled) return c.text('LAN sharing is off on this device', 403);
+    if (!s.lan.enabled) return deny(c, 403, 'LAN sharing is off on this device');
     if (!p.startsWith('/api/')) return next(); // static UI assets carry no data
     c.set('access', 'remote');
     if (PUBLIC_REMOTE.some((r) => r.test(p))) return next();
     const auth = c.req.header('authorization');
     const bearer = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : undefined;
     const token = bearer ?? getCookie(c, TOKEN_COOKIE);
-    if (!token || !tokensEqual(token, s.lan.token)) return c.json({ error: 'unauthorized', message: 'Access token required' }, 401);
+    if (!token || !tokensEqual(token, s.lan.token)) return deny(c, 401, 'Access token required');
     if (mutating) {
-      if (!REMOTE_WRITE_ALLOW.some((r) => r.test(p))) return c.json({ error: 'forbidden', message: 'Not allowed from another device' }, 403);
+      if (!REMOTE_WRITE_ALLOW.some((r) => r.test(p))) return deny(c, 403, 'Not allowed from another device');
       const origin = c.req.header('origin');
       if (origin && !bearer) {
         try {
-          if (new URL(origin).host !== host) return c.text('Cross-origin request blocked', 403);
+          if (new URL(origin).host !== host) return deny(c, 403, 'Cross-origin request blocked');
         } catch {
-          return c.text('Bad origin', 403);
+          return deny(c, 403, 'Bad origin');
         }
       }
     } else if (REMOTE_READ_DENY.some((r) => r.test(p))) {
-      return c.json({ error: 'forbidden', message: 'Only available on the device itself' }, 403);
+      return deny(c, 403, 'Only available on the device itself');
     }
     return next();
   };

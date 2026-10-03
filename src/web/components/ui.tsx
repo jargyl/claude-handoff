@@ -320,7 +320,7 @@ export function Segmented<T extends string>({ options, value, onChange, label }:
 
 export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: Array<{ value: T; label: ReactNode; count?: number }>; value: T; onChange: (v: T) => void }) {
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-line scroll-thin">
+    <div role="tablist" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line scroll-thin">
       {tabs.map((t) => (
         <button
           key={t.value}

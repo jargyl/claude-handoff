@@ -119,7 +119,7 @@ function Results({ result, platform, home }: { result: ImportResult; platform: s
               <div className="flex flex-wrap items-center gap-2">
                 {i.ok ? <CircleCheck className="size-4 text-good" aria-label="Done" /> : <CircleX className="size-4 text-bad" aria-label="Failed" />}
                 <Link to={`/sessions/${id}`} className="min-w-0 flex-1 truncate font-semibold hover:underline">
-                  {id}
+                  {i.title}
                 </Link>
                 <Badge>{ACTIONS[i.action]}</Badge>
                 {i.ok && i.rewrites > 0 && <Badge tone="info">{plural(i.rewrites, 'path')} updated</Badge>}
@@ -252,7 +252,7 @@ export default function ImportReview() {
         description={
           <>
             {plural(plan.candidates.length, 'session')} from {sourceName}
-            {plan.sourceDevice ? ` (${plan.sourceDevice.platform === 'win32' ? 'Windows' : plan.sourceDevice.platform === 'darwin' ? 'macOS' : plan.sourceDevice.platform})` : ''} · added {relative(plan.createdAt)}
+            {plan.sourceDevice ? ` · ${plan.sourceDevice.platform === 'win32' ? 'Windows' : plan.sourceDevice.platform === 'darwin' ? 'macOS' : plan.sourceDevice.platform}` : ''} · added {relative(plan.createdAt)}
           </>
         }
       />

@@ -41,7 +41,20 @@ interface StagingMeta {
 const UNKNOWN_DEVICE: DeviceInfo = { id: 'unknown', name: 'Unknown device', platform: 'unknown', homeDir: '', claudeDir: '', app: 'unknown', version: '' };
 
 export class StagingStore {
+  /** staged files are parsed for the plan, the review and the commit: do it once */
+  private cores = new Map<string, { size: number; mtimeMs: number; core: SessionCore }>();
+
   constructor(private root: string) {}
+
+  private async summarize(file: string): Promise<SessionCore> {
+    const st = await fsp.stat(file);
+    const hit = this.cores.get(file);
+    if (hit && hit.size === st.size && hit.mtimeMs === st.mtimeMs) return hit.core;
+    const core = await summarizeFile(file);
+    this.cores.set(file, { size: st.size, mtimeMs: st.mtimeMs, core });
+    if (this.cores.size > 200) this.cores.delete(this.cores.keys().next().value!);
+    return core;
+  }
 
   private dirOf(id: string) {
     if (!/^[a-z0-9-]{8,64}$/i.test(id)) throw new Error('Bad staging id');
@@ -94,7 +107,9 @@ export class StagingStore {
   }
 
   async remove(id: string): Promise<void> {
-    await fsp.rm(this.dirOf(id), { recursive: true, force: true });
+    const dir = this.dirOf(id);
+    for (const k of this.cores.keys()) if (k.startsWith(dir)) this.cores.delete(k);
+    await fsp.rm(dir, { recursive: true, force: true });
   }
 
   async saveMeta(s: Staging): Promise<void> {
@@ -206,7 +221,7 @@ export class StagingStore {
         if (!name.endsWith('.jsonl') || name.startsWith('agent-')) continue;
         const id = name.slice(0, -6);
         const mainFile = path.join(projects, dir, name);
-        const core = await summarizeFile(mainFile);
+        const core = await this.summarize(mainFile);
         const fromManifest = s.manifest.sessions.find((x) => x.id === id);
         const matching = [...core.cwds].reverse().find((c) => sameEncodedDir(encodeProjectDir(c), dir));
         const projectPath = fromManifest?.projectPath ?? matching ?? core.cwds[core.cwds.length - 1] ?? naiveDecodeProjectDir(dir);

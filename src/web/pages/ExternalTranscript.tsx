@@ -62,7 +62,7 @@ export default function ExternalTranscript({ source }: { source: 'device' | 'syn
           {(t.error as Error).message}
         </Callout>
       ) : (
-        <TranscriptView units={units} f={DEFAULT_FILTERS} ctx={{ sessionId: sid, projectPath: '', home: me.data?.device.homeDir ?? '', live: false }} />
+        <TranscriptView units={units} f={DEFAULT_FILTERS} ctx={{ sessionId: sid, projectPath: '', home: me.data?.device.homeDir ?? '', live: false, external: true }} />
       )}
     </>
   );

@@ -132,7 +132,8 @@ async function main() {
     paths,
     device,
     port: () => port,
-    lanUrls: () => lanAddresses().map((a) => `http://${a}:${port}`),
+    // nothing to advertise when we only listen on loopback (e.g. --host 127.0.0.1)
+    lanUrls: () => (/^(127\.|localhost$|::1$)/.test(bindHost()) ? [] : lanAddresses().map((a) => `http://${a}:${port}`)),
     applyNetwork: async () => {
       await listen(port, true);
       const s = settings.get();

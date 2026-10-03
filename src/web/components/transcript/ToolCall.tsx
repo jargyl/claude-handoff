@@ -33,6 +33,8 @@ export interface ToolContext {
   projectPath: string;
   home: string;
   live: boolean;
+  /** viewing a session that lives on another device or in the sync folder: images and full output stay there */
+  external?: boolean;
   onOpenSubagent?: (agentId: string) => void;
 }
 
@@ -118,7 +120,7 @@ const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
 function FullOutput({ result, toolId, ctx }: { result: ToolResult; toolId: string; ctx: ToolContext }) {
   const [full, setFull] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  if (!result.truncated) return null;
+  if (!result.truncated || ctx.external) return null;
   if (full !== null) return <Pre className="mt-2">{stripAnsi(full)}</Pre>;
   return (
     <Button
@@ -145,6 +147,7 @@ function FullOutput({ result, toolId, ctx }: { result: ToolResult; toolId: strin
 
 function ResultImages({ result, ctx }: { result: ToolResult; ctx: ToolContext }) {
   if (!result.images.length) return null;
+  if (ctx.external) return <p className="mt-2 text-xs text-ink-3">{result.images.length} image(s). Pull the session to see them.</p>;
   return (
     <div className="mt-2 flex flex-wrap gap-2">
       {result.images.map((img) => (

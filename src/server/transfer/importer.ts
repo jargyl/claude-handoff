@@ -320,7 +320,7 @@ export class Importer {
       const action: ImportAction = req.actions[s.id] ?? cand.suggestedAction;
       if (action === 'skip') continue;
       if (!cand.allowedActions.includes(action)) {
-        results.push({ sessionId: s.id, action, ok: false, error: `“${action}” isn't possible for this session right now.`, targetPath: cand.targetPath, rewrites: 0 });
+        results.push({ sessionId: s.id, title: s.title, action, ok: false, error: `“${action}” isn't possible for this session right now.`, targetPath: cand.targetPath, rewrites: 0 });
         continue;
       }
       try {
@@ -345,7 +345,7 @@ export class Importer {
           ...(res.backedUp ? { backupDir: backupRoot } : {}),
         });
       } catch (e: any) {
-        results.push({ sessionId: s.id, action, ok: false, error: e?.message ?? String(e), targetPath: cand.targetPath, rewrites: 0 });
+        results.push({ sessionId: s.id, title: s.title, action, ok: false, error: e?.message ?? String(e), targetPath: cand.targetPath, rewrites: 0 });
       }
     }
 
@@ -463,6 +463,7 @@ export class Importer {
     return {
       result: {
         sessionId: s.id,
+        title: s.title,
         action,
         ok: true,
         ...(action === 'copy' ? { newSessionId: newId } : {}),
