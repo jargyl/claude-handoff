@@ -567,6 +567,31 @@ export function createApp(ctx: AppContext) {
 
   app.get('/api/sync', async (c) => c.json(await ctx.sync.state()));
 
+  /** Cloud-synced folders that already exist on this machine. */
+  app.get('/api/sync/suggestions', async (c) => {
+    const home = os.homedir();
+    const out: Array<{ name: string; path: string }> = [];
+    const add = (name: string, p: string) => {
+      try {
+        if (fs.statSync(p).isDirectory() && !out.some((o) => o.path === p)) out.push({ name, path: p });
+      } catch {
+        /* not there */
+      }
+    };
+    for (const n of await fsp.readdir(home).catch(() => [] as string[])) {
+      if (/^OneDrive/i.test(n)) add(n.replace(/^OneDrive\s*-\s*/i, 'OneDrive · ').replace(/^OneDrive$/i, 'OneDrive'), path.join(home, n));
+    }
+    if (process.env.OneDrive) add('OneDrive', process.env.OneDrive);
+    add('Dropbox', path.join(home, 'Dropbox'));
+    add('Google Drive', path.join(home, 'Google Drive'));
+    add('Google Drive', path.join(home, 'My Drive'));
+    add('iCloud Drive', path.join(home, 'iCloudDrive'));
+    add('iCloud Drive', path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'));
+    add('Syncthing', path.join(home, 'Sync'));
+    if (process.platform === 'win32') for (const d of 'DEFGHIJ') add(`Google Drive (${d}:)`, `${d}:\\My Drive`);
+    return c.json({ suggestions: out });
+  });
+
   app.post('/api/sync/push', async (c) => {
     const b = await body<{ ids?: string[]; all?: boolean; force?: boolean }>(c);
     if (!ctx.sync.folder()) throw bad('Choose a sync folder first.');

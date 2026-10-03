@@ -3,11 +3,11 @@
 
 import crypto from 'node:crypto';
 import { readLines, tryParse } from '../util/lines.js';
-import { classifyUserText, contentText, hasToolResult, oneLine, stripInjected } from './text.js';
+import { classifyUserText, cleanRecap, contentText, hasToolResult, oneLine, plainPrompt, stripInjected } from './text.js';
 import type { Usage } from '../../shared/types.js';
 import { isSyntheticModel } from '../../shared/pricing.js';
 
-export const PARSER_VERSION = 4;
+export const PARSER_VERSION = 5;
 
 export interface UsageEvent {
   /** message id (usage is deduplicated per message across split lines) */
@@ -183,14 +183,14 @@ export async function summarizeFile(file: string): Promise<SessionCore> {
         if (typeof o.summary === 'string' && o.summary.trim()) core.summaryTitle = o.summary.trim();
         break;
       case 'last-prompt':
-        if (typeof o.lastPrompt === 'string') core.lastPrompt = oneLine(o.lastPrompt, 300);
+        if (typeof o.lastPrompt === 'string') core.lastPrompt = oneLine(plainPrompt(o.lastPrompt), 300);
         break;
       case 'fork-context-ref':
         if (typeof o.parentSessionId === 'string') core.parentSessionId = o.parentSessionId;
         break;
       case 'system':
         if (o.subtype === 'compact_boundary') core.compactions++;
-        else if (o.subtype === 'away_summary' && typeof o.content === 'string') core.recap = o.content;
+        else if (o.subtype === 'away_summary' && typeof o.content === 'string') core.recap = cleanRecap(o.content);
         break;
       case 'user': {
         const content = o.message?.content;
@@ -212,7 +212,7 @@ export async function summarizeFile(file: string): Promise<SessionCore> {
         if (!clean) break;
         core.userMessages++;
         if (!Number.isNaN(tsMs)) core.promptTimes.push(tsMs);
-        if (!core.firstPrompt) core.firstPrompt = oneLine(clean, 300);
+        if (!core.firstPrompt) core.firstPrompt = oneLine(plainPrompt(clean), 300);
         lastPromptText = clean;
         break;
       }
@@ -262,7 +262,7 @@ export async function summarizeFile(file: string): Promise<SessionCore> {
   core.idHash = hashIds(core.idSeq);
   if (Number.isFinite(minTs)) core.startedAt = new Date(minTs).toISOString();
   if (Number.isFinite(maxTs)) core.endedAt = new Date(maxTs).toISOString();
-  if (!core.lastPrompt && lastPromptText) core.lastPrompt = oneLine(lastPromptText, 300);
+  if (!core.lastPrompt && lastPromptText) core.lastPrompt = oneLine(plainPrompt(lastPromptText), 300);
   return core;
 }
 

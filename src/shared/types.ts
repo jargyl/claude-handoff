@@ -151,6 +151,7 @@ export interface ToolResultMeta {
 }
 
 export interface ToolResult {
+  ts?: string;
   text: string;
   truncated: boolean;
   fullLength: number;
@@ -170,6 +171,7 @@ export type Block =
       input: unknown;
       inputTruncated?: boolean;
       line: number;
+      ts?: string;
       result?: ToolResult;
     };
 

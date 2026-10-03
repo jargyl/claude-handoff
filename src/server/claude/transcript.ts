@@ -4,7 +4,7 @@
 // injected context is kept but marked so the UI can hide it.
 
 import { readLines, tryParse } from '../util/lines.js';
-import { classifyUserText, contentText, oneLine, stripInjected, tagContent } from './text.js';
+import { classifyUserText, cleanRecap, contentText, oneLine, stripInjected, tagContent } from './text.js';
 import { toUsage } from './parse.js';
 import type { Block, ImageRef, PatchHunk, ToolResult, ToolResultMeta, Transcript, TranscriptItem, Usage } from '../../shared/types.js';
 import { isSyntheticModel } from '../../shared/pricing.js';
@@ -269,6 +269,7 @@ export async function buildTranscript(
               name: String(b.name ?? 'tool'),
               input: value,
               line,
+              ...(ts ? { ts } : {}),
               ...(truncated ? { inputTruncated: true } : {}),
             };
             item.blocks.push(block);
@@ -297,6 +298,7 @@ export async function buildTranscript(
             const { text, images } = resultTextAndImages(b.content, line, bi);
             const t = truncate(text, TEXT_LIMIT);
             const res: ToolResult = {
+              ...(ts ? { ts } : {}),
               text: t.text,
               truncated: t.truncated,
               fullLength: text.length,
@@ -313,7 +315,9 @@ export async function buildTranscript(
             } else {
               push({ kind: 'notice', tone: 'info', uuid, ts, line, label: 'Tool result', text: t.text, ...(sidechain ? { sidechain } : {}) });
             }
-            if (text) corpus.push({ uuid, role: 'tool', ts, text: text.slice(0, CORPUS_TOOL_LIMIT) });
+            // point search hits at the message that made the call (tool result lines aren't rendered on their own)
+            const owner = target ? (items[target.item] as { uuid: string }).uuid : uuid;
+            if (text) corpus.push({ uuid: owner, role: 'tool', ts, text: text.slice(0, CORPUS_TOOL_LIMIT) });
           });
           break;
         }
@@ -425,7 +429,7 @@ export async function buildTranscript(
         } else {
           const text = typeof o.content === 'string' ? o.content : '';
           if (!text) break;
-          push({ kind: 'system', uuid, ts, line, subtype: sub, text: truncate(text, TEXT_LIMIT).text, ...(o.level ? { level: o.level } : {}) });
+          push({ kind: 'system', uuid, ts, line, subtype: sub, text: truncate(sub === 'away_summary' ? cleanRecap(text) : text, TEXT_LIMIT).text, ...(o.level ? { level: o.level } : {}) });
         }
         break;
       }

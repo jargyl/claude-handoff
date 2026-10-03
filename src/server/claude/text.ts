@@ -35,6 +35,18 @@ export function stripInjected(text: string): string {
     .trim();
 }
 
+/** For one-line summaries: drop the markers Claude Code wraps pasted text in, keep the text. */
+export function plainPrompt(text: string): string {
+  return stripInjected(text)
+    .replace(/<\/?pasted_content[^>]*>/g, ' ')
+    .trim();
+}
+
+/** Claude Code appends a hint about its own setting to recaps. */
+export function cleanRecap(text: string): string {
+  return text.replace(/\s*\(disable recaps in \/config\)\s*$/i, '').trim();
+}
+
 export function oneLine(text: string, max = 240): string {
   const s = text.replace(/\s+/g, ' ').trim();
   return s.length > max ? s.slice(0, max - 1) + '…' : s;
