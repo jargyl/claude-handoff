@@ -3,6 +3,7 @@ import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import {
   ChartColumn,
   Cloud,
+  FileArchive,
   FolderGit2,
   Inbox,
   LayoutDashboard,
@@ -24,6 +25,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { Kbd, ProgressBar, Spinner, cx } from './components/ui';
 import { RemoteLogin } from './pages/RemoteLogin';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { useImportFiles } from './components/DropZone';
 
 const Overview = lazy(() => import('./pages/Overview'));
 const Sessions = lazy(() => import('./pages/Sessions'));
@@ -158,6 +160,57 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
   );
 }
 
+/** Drop a bundle or transcript anywhere in the app to import it. */
+function useGlobalDrop(enabled: boolean) {
+  const { run, progress } = useImportFiles();
+  const runRef = useRef(run);
+  runRef.current = run;
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let depth = 0;
+    const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth++;
+      setDragging(true);
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setDragging(false);
+    };
+    const onOver = (e: DragEvent) => {
+      if (hasFiles(e)) e.preventDefault();
+    };
+    // capture phase: always clear the overlay, even when a drop zone stops the event
+    const onDropCapture = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = 0;
+      setDragging(false);
+    };
+    // bubble phase: import, unless a drop zone on the page already handled it
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      void runRef.current([...(e.dataTransfer?.files ?? [])]);
+    };
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDropCapture, true);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('drop', onDropCapture, true);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, [enabled]);
+  return { dragging, progress };
+}
+
 export function App() {
   const { index } = useServerEvents();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -168,6 +221,8 @@ export function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const gPressed = useRef(0);
+  const me = useMe();
+  const drop = useGlobalDrop(me.data?.access === 'local');
 
   useEffect(() => onUnauthorized(() => setNeedsLogin(true)), []);
   useEffect(() => setDrawer(false), [location.pathname]);
@@ -270,6 +325,21 @@ export function App() {
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {drop.dragging && (
+        <div className="pointer-events-none fixed inset-0 z-[70] grid place-items-center bg-bg/80 p-6 backdrop-blur-sm">
+          <div className="flex w-full max-w-lg flex-col items-center rounded-[14px] border-2 border-dashed border-signal-line bg-signal-wash px-8 py-12 text-center">
+            <FileArchive className="mb-3 size-8 text-ink-2" aria-hidden />
+            <p className="text-lg font-semibold text-ink">Drop to import</p>
+            <p className="mt-1 text-sm text-ink-2">A bundle (.zip) or session files (.jsonl). You'll review where everything goes first.</p>
+          </div>
+        </div>
+      )}
+      {drop.progress && (
+        <div className="fixed bottom-4 left-1/2 z-[70] w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-[10px] border border-line bg-raised px-4 py-3 shadow-[var(--shadow)]">
+          <p className="mb-1.5 truncate text-sm text-ink-2">Reading {drop.progress.name}…</p>
+          <ProgressBar value={drop.progress.value} />
+        </div>
+      )}
     </div>
   );
 }

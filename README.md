@@ -127,7 +127,7 @@ If Handoff is already running, starting it again just opens the browser.
 ## Development
 
 ```bash
-npm run dev        # API with reload on :7421 + Vite on :5173
+npm run dev        # API with reload on :7421 + Vite on :5273
 npm test           # unit and integration tests (vitest)
 npm run typecheck  # server and web
 npm run build      # dist/web + a single-file dist/server/index.js

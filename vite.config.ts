@@ -11,7 +11,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
   },
   server: {
-    port: 5173,
+    port: 5273, // not Vite's default, so it doesn't collide with your other projects
     proxy: {
       '/api': { target: 'http://127.0.0.1:7421', changeOrigin: false },
     },

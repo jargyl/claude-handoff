@@ -51,6 +51,7 @@ export function DropZone() {
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
+        e.stopPropagation(); // the app-wide drop handler would import it a second time
         setOver(false);
         void run([...e.dataTransfer.files]);
       }}
