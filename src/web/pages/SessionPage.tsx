@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  Rocket,
   ArrowDown,
   ArrowLeft,
   ArrowLeftRight,
@@ -27,6 +28,7 @@ import { api, ApiError, download } from '../lib/api';
 import { qk, useMe, useSession, useSessionMeta, useTranscript } from '../lib/queries';
 import { bytes, compact, cost, dateTime, duration, middleTruncate, plural, relative, shortId, time } from '../lib/format';
 import { useToast } from '../lib/toast';
+import { useOpenRun } from '../components/RunPanel';
 import { dirname, tildify } from '../../shared/paths';
 import { HandoffDialog } from '../components/HandoffDialog';
 import { DEFAULT_FILTERS, TranscriptView, buildUnits, plainPromptText, unitText, unitUuids, type TranscriptFilters } from '../components/transcript/Transcript';
@@ -54,6 +56,7 @@ function Header({ s, home, onHandoff }: { s: SessionDetail; home: string; onHand
   const qc = useQueryClient();
   const me = useMe();
   const remote = me.data?.access === 'remote';
+  const openRun = useOpenRun();
   useEffect(() => setTitle(s.title), [s.title]);
 
   const resume = async () => {
@@ -134,6 +137,11 @@ function Header({ s, home, onHandoff }: { s: SessionDetail; home: string; onHand
             <Button icon={Send} onClick={onHandoff}>
               Hand off
             </Button>
+            {!remote && (
+              <Button icon={Rocket} onClick={() => openRun(s.projectPath)} disabled={!s.resume.cwdExists} title={s.resume.cwdExists ? 'Start the dev server or app for this project' : "The project folder doesn't exist on this machine"}>
+                Run project
+              </Button>
+            )}
             <div className="flex">
               <Button variant="primary" icon={Play} onClick={resume} disabled={!s.resume.cwdExists} title={s.resume.cwdExists ? 'Open a terminal and resume this session' : "The project folder doesn't exist on this machine"} className="rounded-r-none">
                 Resume

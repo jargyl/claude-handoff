@@ -6,6 +6,7 @@ import { getRequestListener } from '@hono/node-server';
 import { APP_NAME, APP_VERSION, DEFAULT_PORT, DeviceStore, MetaStore, SettingsStore, defaultImportOptions, resolvePaths, type RuntimeOptions } from './config.js';
 import { SessionIndex } from './claude/sessionIndex.js';
 import { EventHub } from './events.js';
+import { CustomCommandStore, RunManager } from './runner.js';
 import { securityMiddleware } from './security.js';
 import { createApp, type AppContext } from './app.js';
 import { StagingStore } from './transfer/staging.js';
@@ -99,6 +100,9 @@ async function main() {
   const discovery = new Discovery(() => ({ id: settings.get().deviceId, name: settings.get().deviceName, port }));
   const pairing = new PairingCodes();
   const trash = new Trash(paths.trashDir, index);
+  const runs = new RunManager();
+  const customRuns = new CustomCommandStore(path.join(paths.dataDir, 'run-commands.json'));
+  runs.on('change', () => events.emit({ type: 'runs' }));
 
   index.on('index', (status) => events.emit({ type: 'index', status }));
   index.on('sessions', (e) => events.emit({ type: 'sessions', changed: e.changed, removed: e.removed }));
@@ -128,6 +132,8 @@ async function main() {
     pairing,
     trash,
     events,
+    runs,
+    customRuns,
     paths,
     device,
     port: () => port,
@@ -204,6 +210,7 @@ async function main() {
   if (opts.open && !opts.dev) openBrowser(url);
 
   const shutdown = () => {
+    runs.stopAll();
     index.stop();
     sync.stop();
     discovery.stop();
@@ -212,6 +219,9 @@ async function main() {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  // closing the console window on Windows
+  process.on('SIGHUP', shutdown);
+  process.on('exit', () => runs.stopAll());
 }
 
 // Keep the dashboard up if something unexpected slips through (a file vanishing mid-read, a peer dropping).

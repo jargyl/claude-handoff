@@ -524,4 +524,72 @@ export type ServerEvent =
   | { type: 'inbox'; count: number }
   | { type: 'sync'; pendingPush: number; lastPushAt?: string }
   | { type: 'devices' }
-  | { type: 'toast'; tone: 'info' | 'success' | 'error'; message: string };
+  | { type: 'toast'; tone: 'info' | 'success' | 'error'; message: string }
+  | { type: 'runs' };
+
+// ------------------------------------------------------------------ running projects
+
+export type RunKind = 'dev' | 'start' | 'build' | 'test' | 'install' | 'open' | 'other' | 'custom';
+
+/** A way to run a project, found in its files or saved by you. */
+export interface RunCommand {
+  id: string;
+  label: string;
+  command: string;
+  /** folder relative to the project root ('' = the root) */
+  cwd: string;
+  kind: RunKind;
+  /** where it came from, e.g. "package.json" or "Saved by you" */
+  source: string;
+  /** dependencies aren't installed yet: the install step runs first */
+  install?: string;
+  /** the best default for this project */
+  primary?: boolean;
+}
+
+export interface CustomRunCommand {
+  label: string;
+  command: string;
+  cwd?: string;
+}
+
+export type RunStatus = 'running' | 'exited' | 'failed' | 'stopped';
+
+export interface RunInfo {
+  id: string;
+  projectPath: string;
+  projectName: string;
+  commandId: string;
+  label: string;
+  command: string;
+  cwd: string;
+  pid?: number;
+  status: RunStatus;
+  exitCode?: number | null;
+  startedAt: string;
+  endedAt?: string;
+  /** first local URL the process printed (a dev server's address) */
+  url?: string;
+  lines: number;
+}
+
+export interface RunLogLine {
+  n: number;
+  text: string;
+  err?: boolean;
+}
+
+export interface RunLog {
+  run: RunInfo;
+  lines: RunLogLine[];
+  next: number;
+}
+
+export interface ProjectRunInfo {
+  path: string;
+  name: string;
+  exists: boolean;
+  commands: RunCommand[];
+  custom: CustomRunCommand[];
+  runs: RunInfo[];
+}

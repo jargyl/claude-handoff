@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
-import { Brain, FolderGit2, FolderX } from 'lucide-react';
+import { Brain, FolderGit2, FolderX, Rocket } from 'lucide-react';
+import { useOpenRun } from '../components/RunPanel';
 import { useMe, useProjects } from '../lib/queries';
 import { compact, cost, plural, relative } from '../lib/format';
 import { tildify } from '../../shared/paths';
@@ -9,6 +10,8 @@ export default function Projects() {
   const projects = useProjects();
   const me = useMe();
   const home = me.data?.device.homeDir ?? '';
+  const local = me.data?.access === 'local';
+  const openRun = useOpenRun();
   const list = projects.data?.projects ?? [];
   return (
     <>
@@ -25,7 +28,7 @@ export default function Projects() {
             <Link
               key={p.dir}
               to={`/sessions?project=${encodeURIComponent(p.dir)}`}
-              className="cv-auto grid grid-cols-[4px_minmax(0,1fr)_96px] items-stretch rounded-[5px] border border-line bg-surface hover:border-line-strong hover:bg-raised md:grid-cols-[4px_minmax(0,1fr)_120px_120px_96px]"
+              className="cv-auto grid grid-cols-[4px_minmax(0,1fr)_96px_auto] items-stretch rounded-[5px] border border-line bg-surface hover:border-line-strong hover:bg-raised md:grid-cols-[4px_minmax(0,1fr)_120px_120px_96px_auto]"
             >
               <span aria-hidden className={p.live ? 'rounded-l-[5px] bg-signal' : 'rounded-l-[5px] bg-line-strong/70'} />
               <div className="min-w-0 px-3 py-2.5">
@@ -57,6 +60,22 @@ export default function Projects() {
               <div className="flex flex-col items-end justify-center border-l border-line px-3 text-sm">
                 <span className="tnum font-medium">{cost(p.cost)}</span>
                 <span className="text-xs text-ink-3 md:hidden">{plural(p.sessions, 'session')}</span>
+              </div>
+              <div className="flex items-center border-l border-line px-2">
+                {local && p.pathExists && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openRun(p.path);
+                    }}
+                    aria-label={`Run ${p.name}`}
+                    title="Run this project"
+                    className="grid size-8 place-items-center rounded-[6px] text-ink-3 hover:bg-sunken hover:text-ink"
+                  >
+                    <Rocket className="size-4" />
+                  </button>
+                )}
               </div>
             </Link>
           ))}

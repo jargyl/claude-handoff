@@ -7,7 +7,9 @@ import type {
   ImportPlan,
   IndexStatus,
   MeResponse,
+  ProjectRunInfo,
   ProjectSummary,
+  RunInfo,
   RemoteSessionView,
   SearchResponse,
   SessionDetail,
@@ -27,6 +29,8 @@ export const qk = {
   session: (id: string) => ['session', id] as const,
   transcript: (id: string, agent?: string) => ['transcript', id, agent ?? null] as const,
   projects: ['projects'] as const,
+  runs: ['runs'] as const,
+  runProject: (path: string) => ['run-project', path] as const,
   stats: (p: object) => ['stats', p] as const,
   search: (p: object) => ['search', p] as const,
   imports: ['imports'] as const,
@@ -178,5 +182,19 @@ export function useSessionMeta() {
       void qc.invalidateQueries({ queryKey: qk.sessions });
       void qc.invalidateQueries({ queryKey: qk.session(v.id) });
     },
+  });
+}
+
+// ------------------------------------------------------------------ running projects
+
+export function useRuns(enabled = true) {
+  return useQuery({ queryKey: qk.runs, queryFn: () => api.get<{ runs: RunInfo[] }>('/api/run'), enabled });
+}
+
+export function useProjectRun(path: string | null) {
+  return useQuery({
+    queryKey: qk.runProject(path ?? ''),
+    queryFn: () => api.get<ProjectRunInfo>(`/api/run/project?path=${encodeURIComponent(path!)}`),
+    enabled: !!path,
   });
 }

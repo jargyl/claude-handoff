@@ -9,6 +9,7 @@ import { BrowserRouter } from 'react-router';
 import { App } from './App';
 import { ThemeProvider } from './lib/theme';
 import { ToastProvider } from './lib/toast';
+import { RunProvider } from './components/RunPanel';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +23,9 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <ToastProvider>
           <BrowserRouter>
-            <App />
+            <RunProvider>
+              <App />
+            </RunProvider>
           </BrowserRouter>
         </ToastProvider>
       </ThemeProvider>

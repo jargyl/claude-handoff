@@ -1,6 +1,7 @@
 import { Component, Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import {
+  ExternalLink,
   ChartColumn,
   Cloud,
   FileArchive,
@@ -19,7 +20,8 @@ import {
   X,
 } from 'lucide-react';
 import { useServerEvents } from './lib/events';
-import { useImports, useMe, useSessions } from './lib/queries';
+import { useImports, useMe, useRuns, useSessions } from './lib/queries';
+import { RunDot, useOpenRun } from './components/RunPanel';
 import { useTheme } from './lib/theme';
 import { onUnauthorized } from './lib/api';
 import { LogoMark } from './components/Logo';
@@ -134,6 +136,9 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
   const { resolved, toggle } = useTheme();
   const live = sessions.data?.sessions.filter((s) => s.live).length ?? 0;
   const remote = me.data?.access === 'remote';
+  const runs = useRuns(me.data?.access === 'local');
+  const openRun = useOpenRun();
+  const active = (runs.data?.runs ?? []).filter((r) => r.status === 'running');
   return (
     <nav aria-label="Main" className="flex h-full flex-col gap-5 px-3 pb-3 pt-4" onClick={(e) => (e.target as HTMLElement).closest('a') && onNavigate?.()}>
       <div className="flex items-center gap-2.5 px-1">
@@ -184,6 +189,24 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
           <NavItem to="/sync" icon={Cloud}>
             Sync folder
           </NavItem>
+        </div>
+      )}
+      {!remote && active.length > 0 && (
+        <div className="flex flex-col gap-0.5">
+          <p className="mb-1 px-2.5 text-sm text-ink-3">Running</p>
+          {active.map((r) => (
+            <div key={r.id} className="group flex h-8 items-center gap-2 rounded-[6px] px-2.5 hover:bg-sunken">
+              <RunDot status={r.status} />
+              <button onClick={() => (openRun(r.projectPath), onNavigate?.())} className="min-w-0 flex-1 truncate text-left text-base text-ink-2 hover:text-ink" title={`${r.projectName}: ${r.command}`}>
+                {r.projectName} <span className="text-ink-3">{r.label}</span>
+              </button>
+              {r.url && (
+                <a href={r.url} target="_blank" rel="noreferrer" aria-label={`Open ${r.url}`} title={r.url} className="shrink-0 text-ink-3 hover:text-ink">
+                  <ExternalLink className="size-3.5" />
+                </a>
+              )}
+            </div>
+          ))}
         </div>
       )}
       <div className="mt-auto flex flex-col gap-0.5">

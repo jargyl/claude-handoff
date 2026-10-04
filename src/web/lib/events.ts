@@ -66,6 +66,10 @@ export function useServerEvents(): { connected: boolean; index: IndexStatus | nu
       });
       on('devices', () => void qc.invalidateQueries({ queryKey: qk.devices }));
       on('sync', () => void qc.invalidateQueries({ queryKey: qk.sync }));
+      on('runs', () => {
+        void qc.invalidateQueries({ queryKey: qk.runs });
+        void qc.invalidateQueries({ queryKey: ['run-project'] });
+      });
       on('toast', (e) => toast({ tone: e.tone, message: e.message }));
     };
     connect();

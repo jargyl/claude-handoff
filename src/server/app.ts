@@ -15,7 +15,9 @@ import { computeStats } from './stats.js';
 import { searchSessions } from './search.js';
 import { transcriptToMarkdown } from './exportMarkdown.js';
 import { RateLimiter, TOKEN_COOKIE, tokensEqual } from './security.js';
-import { listDirs, openResumeTerminal, revealFolder } from './system.js';
+import { listDirs, openBrowser, openChromeExtensions, openResumeTerminal, openTerminalScript, revealFolder } from './system.js';
+import { EXTENSIONS_PAGE, customToCommands, detectRunCommands, resolveCwd, writeTerminalScript, type CustomCommandStore, type RunManager } from './runner.js';
+import { pathToFileURL } from 'node:url';
 import { bundleFileName, bundleToBuffer, planBundle, readCompleteLines, streamBundle } from './transfer/bundle.js';
 import type { StagingStore } from './transfer/staging.js';
 import type { HistoryStore, Importer } from './transfer/importer.js';
@@ -25,7 +27,7 @@ import type { Discovery } from './transfer/discovery.js';
 import type { Trash } from './trash.js';
 import type { EventHub } from './events.js';
 import { pricingTable } from '../shared/pricing.js';
-import type { DeviceInfo, DeviceState, ImportRequest, MeResponse, Settings } from '../shared/types.js';
+import type { CustomRunCommand, DeviceInfo, DeviceState, ImportRequest, MeResponse, ProjectRunInfo, Settings } from '../shared/types.js';
 import { prefixHash } from './claude/parse.js';
 
 export interface AppContext {
@@ -41,6 +43,8 @@ export interface AppContext {
   pairing: PairingCodes;
   trash: Trash;
   events: EventHub;
+  runs: RunManager;
+  customRuns: CustomCommandStore;
   paths: Paths;
   device(): DeviceInfo;
   port(): number;
@@ -241,6 +245,95 @@ export function createApp(ctx: AppContext) {
     }
     return c.json({ ok: true });
   });
+
+  // ------------------------------------------------------------ running projects (local only)
+
+  const projectDir = async (raw: unknown): Promise<{ path: string; name: string }> => {
+    const p = typeof raw === 'string' ? raw.trim() : '';
+    if (!p || !path.isAbsolute(p)) throw bad('Expected an absolute project folder');
+    const st = await fsp.stat(p).catch(() => null);
+    if (!st?.isDirectory()) throw notFound(`The project folder doesn't exist on this machine: ${p}`);
+    return { path: path.resolve(p), name: path.basename(p) };
+  };
+  const commandsFor = async (p: string) => [...customToCommands(ctx.customRuns.get(p)), ...(await detectRunCommands(p))];
+
+  app.get('/api/run', (c) => c.json({ runs: ctx.runs.list() }));
+
+  app.get('/api/run/project', async (c) => {
+    const raw = c.req.query('path') ?? '';
+    const st = await fsp.stat(raw).catch(() => null);
+    if (!raw || !path.isAbsolute(raw) || !st?.isDirectory()) {
+      return c.json({ path: raw, name: path.basename(raw), exists: false, commands: [], custom: [], runs: [] } satisfies ProjectRunInfo);
+    }
+    const proj = await projectDir(raw);
+    return c.json({ ...proj, exists: true, commands: await commandsFor(proj.path), custom: ctx.customRuns.get(proj.path), runs: ctx.runs.forProject(proj.path) } satisfies ProjectRunInfo);
+  });
+
+  app.put('/api/run/project/custom', async (c) => {
+    const b = await body<{ path: string; commands: CustomRunCommand[] }>(c);
+    const proj = await projectDir(b.path);
+    if (!Array.isArray(b.commands)) throw bad('Expected a list of commands');
+    await ctx.customRuns.set(proj.path, b.commands);
+    return c.json({ custom: ctx.customRuns.get(proj.path) });
+  });
+
+  app.post('/api/run', async (c) => {
+    const b = await body<{ path: string; commandId: string; terminal?: boolean }>(c);
+    const proj = await projectDir(b.path);
+    const cmd = (await commandsFor(proj.path)).find((x) => x.id === b.commandId);
+    if (!cmd) throw notFound('That command is no longer in this project. Refresh and try again.');
+    let cwd: string;
+    try {
+      cwd = resolveCwd(proj.path, cmd.cwd);
+    } catch (e: any) {
+      throw bad(e.message);
+    }
+    if (cmd.kind === 'open') {
+      if (cmd.command === EXTENSIONS_PAGE) {
+        // the extensions page only opens in Chrome itself; show the folder to pick next to it
+        openChromeExtensions();
+        revealFolder(cwd);
+        return c.json({ opened: true, hint: 'Turn on Developer mode, click "Load unpacked" and pick the folder that just opened.' });
+      }
+      openBrowser(pathToFileURL(path.join(cwd, cmd.command)).href);
+      return c.json({ opened: true });
+    }
+    if (b.terminal) {
+      const full = cmd.install ? `${cmd.install} && ${cmd.command}` : cmd.command;
+      const script = await writeTerminalScript(path.join(ctx.paths.dataDir, 'run'), cwd, full);
+      try {
+        return c.json(openTerminalScript(cwd, script, `${proj.name}: ${cmd.label}`));
+      } catch (e: any) {
+        throw bad(e.message);
+      }
+    }
+    try {
+      return c.json({ run: ctx.runs.start(proj, cmd) });
+    } catch (e: any) {
+      throw bad(e.message);
+    }
+  });
+
+  app.get('/api/run/:id/log', (c) => {
+    const log = ctx.runs.log(c.req.param('id'), Number(c.req.query('after') ?? 0) || 0);
+    if (!log) throw notFound('That run is gone');
+    return c.json(log);
+  });
+
+  app.post('/api/run/:id/stop', (c) => c.json({ ok: ctx.runs.stop(c.req.param('id')) }));
+
+  app.post('/api/run/:id/restart', async (c) => {
+    const old = ctx.runs.get(c.req.param('id'));
+    if (!old) throw notFound('That run is gone');
+    const cmd = (await commandsFor(old.projectPath)).find((x) => x.id === old.commandId);
+    if (!cmd) throw notFound('That command is no longer in this project');
+    ctx.runs.remove(old.id);
+    // give the old process a moment to free its port
+    await new Promise((r) => setTimeout(r, old.status === 'running' ? 600 : 0));
+    return c.json({ run: ctx.runs.start({ path: old.projectPath, name: old.projectName }, cmd) });
+  });
+
+  app.delete('/api/run/:id', (c) => c.json({ ok: ctx.runs.remove(c.req.param('id')) }));
 
   // ------------------------------------------------------------ projects, stats, search
 

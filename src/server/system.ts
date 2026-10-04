@@ -132,3 +132,40 @@ export function lanAddresses(): string[] {
   }
   return out;
 }
+
+/** Open a terminal window in cwd that runs a script file (written by the runner). */
+export function openTerminalScript(cwd: string, script: string, title: string): { terminal: string } {
+  if (process.platform === 'win32') {
+    if (has('wt')) {
+      detached('wt.exe', ['-d', cwd, '--title', title.replace(/;/g, ','), 'cmd', '/k', script]);
+      return { terminal: 'Windows Terminal' };
+    }
+    detached('cmd.exe', ['/c', 'start', title.replace(/["^&|<>%]/g, ''), '/D', cwd, 'cmd', '/k', script]);
+    return { terminal: 'Command Prompt' };
+  }
+  if (process.platform === 'darwin') {
+    detached('open', ['-a', 'Terminal', script]);
+    return { terminal: 'Terminal' };
+  }
+  const candidates: Array<[string, string[]]> = [
+    ['x-terminal-emulator', ['-e', 'bash', script]],
+    ['gnome-terminal', ['--working-directory', cwd, '--', 'bash', script]],
+    ['konsole', ['--workdir', cwd, '-e', 'bash', script]],
+    ['kitty', ['--directory', cwd, 'bash', script]],
+    ['alacritty', ['--working-directory', cwd, '-e', 'bash', script]],
+    ['xterm', ['-e', 'bash', script]],
+  ];
+  for (const [cmd, args] of candidates) {
+    if (has(cmd)) {
+      detached(cmd, args);
+      return { terminal: cmd };
+    }
+  }
+  throw new Error('No terminal emulator found.');
+}
+
+export function openChromeExtensions(): void {
+  if (process.platform === 'win32') detached('cmd', ['/c', 'start', '', 'chrome', 'chrome://extensions']);
+  else if (process.platform === 'darwin') detached('open', ['-a', 'Google Chrome', 'chrome://extensions']);
+  else detached('google-chrome', ['chrome://extensions']);
+}

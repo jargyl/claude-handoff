@@ -49,7 +49,7 @@ declare module 'hono' {
 /** Routes a remote (token-holding) caller may use besides GETs. */
 const REMOTE_WRITE_ALLOW = [/^\/api\/peer\/inbox$/, /^\/api\/peer\/prefix-hashes$/, /^\/api\/auth\/(login|logout)$/, /^\/api\/peer\/pair$/];
 /** GETs a remote caller may NOT use. */
-const REMOTE_READ_DENY = [/^\/api\/settings/, /^\/api\/fs\//, /^\/api\/devices/, /^\/api\/sync/, /^\/api\/history/, /^\/api\/imports/, /^\/api\/trash/];
+const REMOTE_READ_DENY = [/^\/api\/settings/, /^\/api\/fs\//, /^\/api\/devices/, /^\/api\/sync/, /^\/api\/history/, /^\/api\/imports/, /^\/api\/trash/, /^\/api\/run/];
 /** Reachable without a token even from the network (pairing uses a short code instead). */
 const PUBLIC_REMOTE = [/^\/api\/peer\/pair$/, /^\/api\/peer\/hello$/, /^\/api\/auth\/login$/];
 

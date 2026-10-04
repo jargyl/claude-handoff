@@ -93,6 +93,10 @@ describe('requests from the network', () => {
     expect((await call('/api/settings', { remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/fs/dirs', { remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/imports/x/commit', { method: 'POST', remote, host, headers: auth })).status).toBe(403);
+    // running projects is for this machine only, reads included (logs, project paths)
+    expect((await call('/api/run', { method: 'POST', remote, host, headers: auth })).status).toBe(403);
+    expect((await call('/api/run', { remote, host, headers: auth })).status).toBe(403);
+    expect((await call('/api/run/x/log', { remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/peer/inbox', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
     expect((await call('/api/peer/prefix-hashes', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
   });
