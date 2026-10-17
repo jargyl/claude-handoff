@@ -52,6 +52,8 @@ export interface AppContext {
   applyNetwork(): Promise<void>;
   remoteAddr(c: Context): string | undefined;
   webRoot: string | null;
+  /** Stop Handoff (the dashboard's quit button and the tray icon). */
+  quit(): void;
 }
 
 class HttpError extends Error {
@@ -129,6 +131,12 @@ export function createApp(ctx: AppContext) {
       index: ctx.index.status,
     };
     return c.json(res);
+  });
+
+  // local only: the security middleware refuses writes from other devices
+  app.post('/api/quit', (c) => {
+    setTimeout(() => ctx.quit(), 50);
+    return c.json({ ok: true });
   });
 
   app.post('/api/auth/login', async (c) => {

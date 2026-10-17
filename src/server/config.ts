@@ -17,6 +17,8 @@ export interface RuntimeOptions {
   open: boolean;
   lan?: boolean;
   dev: boolean;
+  /** The icon in the Windows notification area. */
+  tray: boolean;
 }
 
 export interface Paths {

@@ -22,7 +22,7 @@ npm start
 
 The first run installs dependencies and builds the app, which takes about a minute. After that it starts instantly and opens <http://localhost:7420>.
 
-On Windows you can also double-click `start-handoff.cmd`.
+On Windows you can also double-click `start-handoff.cmd`. Handoff then keeps running in the background, without a console window: its icon next to the clock opens the dashboard (click) or quits Handoff (right-click). Anywhere, the power button at the bottom of the sidebar quits it too.
 
 Do the same on your other computer. That's the whole setup.
 
@@ -105,14 +105,18 @@ npm start -- [options]
   --claude-dir <dir>  Claude Code folder (default ~/.claude or $CLAUDE_CONFIG_DIR)
   --data-dir <dir>    Handoff's own data (default ~/.claude-handoff, or $HANDOFF_DATA_DIR)
   --no-open           Don't open the browser
+  --background        Keep running without a console window; output goes to ~/.claude-handoff/handoff.log
+  --no-tray           No icon in the Windows notification area
 ```
 
 If Handoff is already running, starting it again just opens the browser.
 
+`npm start` runs in the terminal you start it from (Ctrl+C stops it). `start-handoff.cmd` uses `--background`; if starting fails, its window stays open and shows why.
+
 ## Where things are
 
 - Reads: `~/.claude/projects` (sessions), `~/.claude/sessions` (which sessions are open), `~/.claude/file-history` (checkpoints) and `~/.claude/settings.json` (cleanup period).
-- Writes its own data to `~/.claude-handoff`: settings, notes and stars, paired devices, the inbox, import history, backups, trash and an index cache.
+- Writes its own data to `~/.claude-handoff`: settings, notes and stars, paired devices, the inbox, import history, backups, trash and an index cache. When it runs in the background, also its log (`handoff.log`) and the script for the tray icon.
 
 ## How it works
 

@@ -16,11 +16,13 @@ import { Discovery } from './transfer/discovery.js';
 import { PairingCodes } from './transfer/peers.js';
 import { Trash } from './trash.js';
 import { lanAddresses, openBrowser } from './system.js';
+import { startTray } from './tray.js';
+import { LOG_ENV, startInBackground, tellLauncher } from './background.js';
 import type { DeviceInfo } from '../shared/types.js';
 import { Hono, type Context } from 'hono';
 
-function parseArgs(argv: string[]): RuntimeOptions & { help?: boolean } {
-  const o: RuntimeOptions & { help?: boolean } = { open: true, dev: false };
+function parseArgs(argv: string[]): RuntimeOptions & { help?: boolean; background?: boolean } {
+  const o: RuntimeOptions & { help?: boolean; background?: boolean } = { open: true, dev: false, tray: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const next = () => argv[++i];
@@ -32,6 +34,8 @@ function parseArgs(argv: string[]): RuntimeOptions & { help?: boolean } {
     else if (a === '--no-open') o.open = false;
     else if (a === '--lan') o.lan = true;
     else if (a === '--dev') o.dev = true;
+    else if (a === '--background') o.background = true;
+    else if (a === '--no-tray') o.tray = false;
     else if (a === '--help' || a === '-h') o.help = true;
   }
   return o;
@@ -47,6 +51,8 @@ Usage: claude-handoff [options]
   --claude-dir <dir>  Claude Code folder (default ~/.claude or $CLAUDE_CONFIG_DIR)
   --data-dir <dir>    Where Handoff keeps its own data (default ~/.claude-handoff)
   --no-open           Don't open the browser
+  --background        Keep running without a console window (output goes to a log file)
+  --no-tray           No icon in the Windows notification area
 `;
 
 async function isHandoffAt(port: number): Promise<boolean> {
@@ -66,6 +72,7 @@ async function main() {
     return;
   }
   const paths = resolvePaths(opts.dataDir);
+  if (opts.background && !opts.dev) await startInBackground(process.argv.slice(2), paths);
   fs.mkdirSync(paths.dataDir, { recursive: true });
   const settings = new SettingsStore(paths.configFile);
   if (opts.lan) await settings.update((s) => void (s.lan.enabled = true));
@@ -117,6 +124,7 @@ async function main() {
     : ([path.join(here, '..', 'web'), path.join(here, '..', '..', 'dist', 'web')].find((p) => fs.existsSync(path.join(p, 'index.html'))) ?? null);
 
   let server: http.Server | null = null;
+  let stopping = false;
   const bindHost = () => opts.host ?? (settings.get().lan.enabled ? '0.0.0.0' : '127.0.0.1');
 
   const ctx: AppContext = {
@@ -147,6 +155,7 @@ async function main() {
     },
     remoteAddr,
     webRoot,
+    quit: () => shutdown(),
   };
 
   const root = new Hono();
@@ -186,6 +195,7 @@ async function main() {
         const url = `http://localhost:${port}`;
         console.log(`Claude Handoff is already running at ${url}`);
         if (opts.open) openBrowser(url);
+        tellLauncher({ handoff: 'already-running', url });
         return;
       }
       if (opts.port || attempt >= 10) {
@@ -208,15 +218,23 @@ async function main() {
   if (s.lan.enabled && s.lan.discovery) discovery.start();
   void index.start().then(() => sync.start());
   if (opts.open && !opts.dev) openBrowser(url);
+  const tray = opts.tray && !opts.dev ? startTray({ dataDir: paths.dataDir, url, log: process.env[LOG_ENV], onQuit: shutdown }) : null;
+  tellLauncher({ handoff: 'ready', url });
 
-  const shutdown = () => {
+  function shutdown() {
+    if (stopping) return;
+    stopping = true;
+    // open dashboards show that Handoff stopped instead of a broken page
+    events.emit({ type: 'quit' });
     runs.stopAll();
     index.stop();
     sync.stop();
     discovery.stop();
     server?.close();
-    setTimeout(() => process.exit(0), 300).unref();
-  };
+    const exit = () => process.exit(0);
+    setTimeout(exit, 1500).unref();
+    void Promise.all([tray?.stop(), new Promise((r) => setTimeout(r, 300))]).then(exit);
+  }
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
   // closing the console window on Windows

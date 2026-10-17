@@ -97,6 +97,8 @@ describe('requests from the network', () => {
     expect((await call('/api/run', { method: 'POST', remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/run', { remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/run/x/log', { remote, host, headers: auth })).status).toBe(403);
+    // only the computer itself can stop Handoff
+    expect((await call('/api/quit', { method: 'POST', remote, host, headers: auth })).status).toBe(403);
     expect((await call('/api/peer/inbox', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
     expect((await call('/api/peer/prefix-hashes', { method: 'POST', remote, host, headers: auth })).status).toBe(200);
   });

@@ -525,7 +525,8 @@ export type ServerEvent =
   | { type: 'sync'; pendingPush: number; lastPushAt?: string }
   | { type: 'devices' }
   | { type: 'toast'; tone: 'info' | 'success' | 'error'; message: string }
-  | { type: 'runs' };
+  | { type: 'runs' }
+  | { type: 'quit' };
 
 // ------------------------------------------------------------------ running projects
 

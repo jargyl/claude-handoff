@@ -30,6 +30,7 @@ import { Kbd, ProgressBar, Spinner, cx } from './components/ui';
 import { RemoteLogin } from './pages/RemoteLogin';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
 import { useImportFiles } from './components/DropZone';
+import { QuitButton, Stopped } from './components/Quit';
 
 const Overview = lazy(() => import('./pages/Overview'));
 const Sessions = lazy(() => import('./pages/Sessions'));
@@ -231,6 +232,7 @@ function Sidebar({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: 
           >
             {resolved === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
+          {!remote && <QuitButton />}
         </div>
       </div>
     </nav>
@@ -289,7 +291,7 @@ function useGlobalDrop(enabled: boolean) {
 }
 
 export function App() {
-  const { index } = useServerEvents();
+  const { index, stopped } = useServerEvents();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -344,6 +346,7 @@ export function App() {
   }, [navigate, toggle]);
 
   if (needsLogin) return <RemoteLogin onDone={() => window.location.reload()} />;
+  if (stopped) return <Stopped />;
 
   return (
     <div className="min-h-dvh bg-bg">

@@ -16,7 +16,7 @@ function detached(cmd: string, args: string[], opts: { cwd?: string; shell?: boo
 }
 
 function has(cmd: string): boolean {
-  const probe = process.platform === 'win32' ? spawnSync('where', [cmd], { stdio: 'ignore' }) : spawnSync('which', [cmd], { stdio: 'ignore' });
+  const probe = process.platform === 'win32' ? spawnSync('where', [cmd], { stdio: 'ignore', windowsHide: true }) : spawnSync('which', [cmd], { stdio: 'ignore' });
   return probe.status === 0;
 }
 

@@ -8,11 +8,13 @@ import { useToast } from './toast';
  * One EventSource for the whole app. Server events invalidate the queries they
  * affect; bursts (a live session writing every second) are coalesced.
  */
-export function useServerEvents(): { connected: boolean; index: IndexStatus | null } {
+export function useServerEvents(): { connected: boolean; index: IndexStatus | null; stopped: boolean } {
   const qc = useQueryClient();
   const toast = useToast();
   const [connected, setConnected] = useState(false);
   const [index, setIndex] = useState<IndexStatus | null>(null);
+  const [stopped, setStopped] = useState(false);
+  const stoppedRef = useRef(false);
   const pending = useRef(new Set<string>());
   const timer = useRef<number | undefined>(undefined);
 
@@ -38,7 +40,15 @@ export function useServerEvents(): { connected: boolean; index: IndexStatus | nu
     let retry: number | undefined;
     const connect = () => {
       es = new EventSource('/api/events', { withCredentials: true });
-      es.addEventListener('open', () => setConnected(true));
+      es.addEventListener('open', () => {
+        setConnected(true);
+        // Handoff started again after quitting: everything on screen is stale
+        if (stoppedRef.current) {
+          stoppedRef.current = false;
+          setStopped(false);
+          void qc.invalidateQueries();
+        }
+      });
       es.addEventListener('error', () => {
         setConnected(false);
         if (es?.readyState === EventSource.CLOSED) {
@@ -71,6 +81,10 @@ export function useServerEvents(): { connected: boolean; index: IndexStatus | nu
         void qc.invalidateQueries({ queryKey: ['run-project'] });
       });
       on('toast', (e) => toast({ tone: e.tone, message: e.message }));
+      on('quit', () => {
+        stoppedRef.current = true;
+        setStopped(true);
+      });
     };
     connect();
     return () => {
@@ -80,5 +94,5 @@ export function useServerEvents(): { connected: boolean; index: IndexStatus | nu
     };
   }, [qc, toast]);
 
-  return { connected, index };
+  return { connected, index, stopped };
 }
