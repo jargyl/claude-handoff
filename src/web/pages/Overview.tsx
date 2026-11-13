@@ -202,7 +202,7 @@ export default function Overview() {
                       <span className="block truncate text-sm text-ink-3">
                         {sync.data?.folder
                           ? `${plural(sync.data.sessions.length, 'session')} in the folder${sync.data.lastPushAt ? `, pushed ${relative(sync.data.lastPushAt)}` : ''}`
-                          : 'Use OneDrive, Dropbox or a USB stick'}
+                          : 'Use Syncthing, OneDrive, Dropbox or a USB stick'}
                       </span>
                     </span>
                   </Link>

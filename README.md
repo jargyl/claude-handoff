@@ -45,7 +45,9 @@ Pairing works both ways: each computer can now browse the other. Open the device
 
 ### Sync folder
 
-Open **Sync folder** and pick a folder (Handoff suggests the cloud folders it finds). Copy sessions in by hand, or turn on automatic copying for all or starred sessions. On the other computer, choose the same folder: sessions show up there with their status, ready to pull.
+Open **Sync folder** and pick a folder (Handoff suggests the cloud folders it finds, including the folders you share with [Syncthing](https://syncthing.net)). Copy sessions in by hand, or turn on automatic copying for all or starred sessions. On the other computer, choose the same folder: sessions show up there with their status, ready to pull.
+
+Syncthing needs no account or cloud: it copies the folder straight between your computers, so both have to be on at the same time for a copy to travel. Sessions that are still coming in (one file at a time) don't show up until they're complete.
 
 The folder also works as an archive. Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default); copies in the sync folder stay, and you can read them in Handoff even after they're gone locally.
 
@@ -82,6 +84,7 @@ After importing you get a **Resume in a terminal** button and the exact command 
 - **Reading a session:** a clean transcript with tool calls folded into one line each (diffs for edits, output for commands), reasoning, images, compaction points, rewound branches, and subagent transcripts. It also has find-in-conversation, an outline of your prompts (J/K to jump between them), live updates while Claude works, one-click resume, rename, notes, and Markdown or raw export.
 - **Search** across every prompt, reply and tool call, with `"exact phrases"` and `-exclusions`.
 - **Analytics:** tokens and cost per day by model, activity calendar, when you work, projects, tools and the token mix. Every chart has a table view.
+- **Notifications** (Windows): when a session that worked for a while starts waiting for you, the tray icon tells you; click it to open the session. Turn it off in Settings.
 - **Command palette** (Ctrl+K) and keyboard shortcuts (`?` lists them). Light and dark mode (`T`). Works on a phone too.
 
 Costs are API-equivalent estimates at Anthropic's list prices. A Claude subscription doesn't bill per token; it's a yardstick. You can add custom prices in Settings.

@@ -121,7 +121,7 @@ export function HandoffDialog({ ids, open, onClose, onDone }: { ids: string[]; o
               <Link className="underline decoration-line-strong underline-offset-2 hover:decoration-ink" to="/sync" onClick={onClose}>
                 Set up a sync folder
               </Link>{' '}
-              to use OneDrive, Dropbox or a shared drive.
+              to use Syncthing, OneDrive, Dropbox or a shared drive.
             </>
           )}
         </p>

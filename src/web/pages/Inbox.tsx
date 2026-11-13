@@ -134,7 +134,7 @@ export default function Inbox() {
                   <Cloud className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden />
                   <span>
                     <span className="block font-medium text-ink">Pull from the sync folder</span>
-                    <span className="text-ink-3">Works when the other computer is off. Uses OneDrive, Dropbox or any shared folder.</span>
+                    <span className="text-ink-3">Works when the other computer is off. Uses Syncthing, OneDrive, Dropbox or any shared folder.</span>
                   </span>
                 </Link>
               </li>

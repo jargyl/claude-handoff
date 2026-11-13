@@ -32,8 +32,8 @@ function Setup() {
         </div>
         <h2 className="text-lg font-semibold">Pick a folder both computers can see</h2>
         <p className="mt-1.5 text-base text-ink-2">
-          OneDrive, Dropbox, Google Drive, iCloud, Syncthing, a network share or a USB stick all work. This computer copies sessions into it; your other computer picks them up, even when this one is
-          switched off. It also keeps a copy of sessions Claude Code would otherwise delete after {me.data?.claude.cleanupPeriodDays ?? 30} days.
+          OneDrive, Dropbox, Google Drive, iCloud, Syncthing, a network share or a USB stick all work. This computer copies sessions into it; your other computer picks them up (with a cloud folder even when this one is
+          switched off; Syncthing needs both computers on). It also keeps a copy of sessions Claude Code would otherwise delete after {me.data?.claude.cleanupPeriodDays ?? 30} days.
         </p>
         {suggestions.data && suggestions.data.suggestions.length > 0 && (
           <div className="mt-5 flex flex-col gap-2 text-left">

@@ -15,7 +15,7 @@ import { computeStats } from './stats.js';
 import { searchSessions } from './search.js';
 import { transcriptToMarkdown } from './exportMarkdown.js';
 import { RateLimiter, TOKEN_COOKIE, tokensEqual } from './security.js';
-import { listDirs, openBrowser, openChromeExtensions, openResumeTerminal, openTerminalScript, revealFolder } from './system.js';
+import { listDirs, syncthingFolders, openBrowser, openChromeExtensions, openResumeTerminal, openTerminalScript, revealFolder } from './system.js';
 import { EXTENSIONS_PAGE, customToCommands, detectRunCommands, resolveCwd, writeTerminalScript, type CustomCommandStore, type RunManager } from './runner.js';
 import { pathToFileURL } from 'node:url';
 import { bundleFileName, bundleToBuffer, planBundle, readCompleteLines, streamBundle } from './transfer/bundle.js';
@@ -693,6 +693,7 @@ export function createApp(ctx: AppContext) {
     add('Google Drive', path.join(home, 'My Drive'));
     add('iCloud Drive', path.join(home, 'iCloudDrive'));
     add('iCloud Drive', path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'));
+    for (const f of syncthingFolders(home)) add(`Syncthing · ${f.label}`, f.path);
     add('Syncthing', path.join(home, 'Sync'));
     if (process.platform === 'win32') for (const d of 'DEFGHIJ') add(`Google Drive (${d}:)`, `${d}:\\My Drive`);
     return c.json({ suggestions: out });
@@ -767,6 +768,7 @@ export function createApp(ctx: AppContext) {
       }
       if (syncFolder !== undefined) s.sync.folder = syncFolder;
       if (b.sync?.autoPush && ['off', 'all', 'starred'].includes(b.sync.autoPush)) s.sync.autoPush = b.sync.autoPush;
+      if (typeof b.notifyWhenWaiting === 'boolean') s.notifyWhenWaiting = b.notifyWhenWaiting;
       if (b.importDefaults) s.importDefaults = { ...s.importDefaults, ...b.importDefaults };
       if (b.pricingOverrides && typeof b.pricingOverrides === 'object') s.pricingOverrides = b.pricingOverrides;
       if ('claudeDir' in b) s.claudeDir = b.claudeDir ? path.resolve(String(b.claudeDir)) : null;

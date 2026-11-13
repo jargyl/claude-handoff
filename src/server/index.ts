@@ -17,6 +17,7 @@ import { PairingCodes } from './transfer/peers.js';
 import { Trash } from './trash.js';
 import { lanAddresses, openBrowser } from './system.js';
 import { startTray } from './tray.js';
+import { watchWaiting } from './notify.js';
 import { LOG_ENV, startInBackground, tellLauncher } from './background.js';
 import type { DeviceInfo } from '../shared/types.js';
 import { Hono, type Context } from 'hono';
@@ -219,6 +220,7 @@ async function main() {
   void index.start().then(() => sync.start());
   if (opts.open && !opts.dev) openBrowser(url);
   const tray = opts.tray && !opts.dev ? startTray({ dataDir: paths.dataDir, url, log: process.env[LOG_ENV], onQuit: shutdown }) : null;
+  if (tray) watchWaiting(index, settings, url, tray.notify);
   tellLauncher({ handoff: 'ready', url });
 
   function shutdown() {

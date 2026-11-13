@@ -493,6 +493,8 @@ export interface Settings {
     autoPush: 'off' | 'all' | 'starred';
   };
   importDefaults: ImportOptions;
+  /** A tray notification when a session that was working starts waiting for you (Windows). */
+  notifyWhenWaiting: boolean;
   pricingOverrides: Record<string, Partial<import('./pricing.js').ModelPrice>>;
 }
 

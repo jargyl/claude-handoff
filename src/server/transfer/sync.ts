@@ -39,6 +39,8 @@ interface SyncSessionMeta {
   pushedAt: string;
   pushedBy: DeviceInfo;
   files: string[];
+  /** Bytes of the main transcript, so a copy that's still syncing in (file by file, e.g. Syncthing) can be told apart. */
+  mainSize?: number;
 }
 
 export interface SyncDeps {
@@ -104,7 +106,9 @@ export class SyncFolder {
       if (n.startsWith('.')) continue;
       try {
         const m = JSON.parse(await fsp.readFile(path.join(this.sessionsDir(), n, 'session.json'), 'utf8')) as SyncSessionMeta;
-        if (m?.id === n) out.push(m);
+        if (m?.id !== n) continue;
+        if (m.mainSize !== undefined && (await fsp.stat(this.mainFile(m))).size !== m.mainSize) continue; // still arriving
+        out.push(m);
       } catch {
         /* half-synced or foreign folder */
       }
@@ -254,7 +258,8 @@ export class SyncFolder {
       const files = [mainRel];
       try {
         await fsp.mkdir(path.join(filesDir, 'projects', s.projectDir), { recursive: true });
-        await fsp.writeFile(path.join(filesDir, ...mainRel.split('/')), await readCompleteLines(s.main.file));
+        const main = await readCompleteLines(s.main.file);
+        await fsp.writeFile(path.join(filesDir, ...mainRel.split('/')), main);
         for (const f of await listSessionSideFiles(this.d.index.layout, s.projectDir, id, { fileHistory: withHistory })) {
           const target = path.join(filesDir, ...f.rel.split('/'));
           await fsp.mkdir(path.dirname(target), { recursive: true });
@@ -277,6 +282,7 @@ export class SyncFolder {
           pushedAt: new Date().toISOString(),
           pushedBy: dev,
           files,
+          mainSize: main.length,
         };
         await writeJsonAtomic(path.join(tmp, 'session.json'), meta);
         const final = path.join(this.sessionsDir(), id);
@@ -305,6 +311,10 @@ export class SyncFolder {
   /** Stage sessions from the sync folder for the import review (one staging per pushing device). */
   async pull(ids: string[]): Promise<Staging[]> {
     const metas = (await this.readMetas()).filter((m) => ids.includes(m.id));
+    for (const m of metas) {
+      const src = path.join(this.sessionsDir(), m.id, 'files');
+      if (m.files.some((f) => !fs.existsSync(path.join(src, ...f.split('/'))))) throw new Error(`"${m.title}" is still arriving in the sync folder. Try again in a moment.`);
+    }
     const byDevice = new Map<string, SyncSessionMeta[]>();
     for (const m of metas) byDevice.set(m.pushedBy.id, [...(byDevice.get(m.pushedBy.id) ?? []), m]);
     const out: Staging[] = [];
@@ -313,7 +323,10 @@ export class SyncFolder {
       const st = await this.d.staging.create({ kind: 'sync', label: `Sync folder (from ${dev.name})`, deviceId: dev.id, deviceName: dev.name });
       st.manifest.source = dev;
       for (const m of list) {
-        await copyTree(path.join(this.sessionsDir(), m.id, 'files'), st.filesDir, () => true);
+        const src = path.join(this.sessionsDir(), m.id, 'files');
+        // only the listed files: skips a sync tool's temp files
+        const listed = new Set(m.files);
+        await copyTree(src, st.filesDir, (rel) => listed.has(rel));
         st.manifest.sessions.push({
           id: m.id,
           projectDir: m.projectDir,

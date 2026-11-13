@@ -73,6 +73,7 @@ function defaults(): Settings {
     lan: { enabled: false, token: newToken(), acceptPush: true, discovery: true },
     sync: { folder: null, autoPush: 'off' },
     importDefaults: defaultImportOptions(),
+    notifyWhenWaiting: true,
     pricingOverrides: {},
   };
 }

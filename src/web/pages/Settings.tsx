@@ -133,6 +133,15 @@ export default function Settings() {
           </Field>
         </Panel>
 
+        <Panel title="Notifications">
+          <Switch
+            checked={s.notifyWhenWaiting}
+            onChange={(v) => save({ notifyWhenWaiting: v })}
+            label="Tell me when Claude is waiting"
+            description="A Windows notification when a session that worked for a while needs your input. Click it to open the session. Needs the tray icon."
+          />
+        </Panel>
+
         <Panel title="When importing sessions" description="Defaults for the import review. You can change them per import.">
           <div className="flex flex-col gap-4">
             <Switch checked={s.importDefaults.rewriteMetadata} onChange={(v) => save({ importDefaults: { rewriteMetadata: v } })} label="Point session details at the new folder" description="Working directory and checkpoint paths. Recommended." />

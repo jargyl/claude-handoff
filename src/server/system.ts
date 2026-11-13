@@ -169,3 +169,38 @@ export function openChromeExtensions(): void {
   else if (process.platform === 'darwin') detached('open', ['-a', 'Google Chrome', 'chrome://extensions']);
   else detached('google-chrome', ['chrome://extensions']);
 }
+
+/** Folders Syncthing shares on this machine, from its config.xml. */
+export function syncthingFolders(home = os.homedir()): Array<{ label: string; path: string }> {
+  const local = process.env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local');
+  const xdgState = process.env.XDG_STATE_HOME ?? path.join(home, '.local', 'state');
+  const configs = [
+    path.join(local, 'Syncthing', 'config.xml'),
+    path.join(home, 'Library', 'Application Support', 'Syncthing', 'config.xml'),
+    path.join(xdgState, 'syncthing', 'config.xml'),
+    path.join(home, '.config', 'syncthing', 'config.xml'),
+  ];
+  for (const c of configs) {
+    try {
+      return parseSyncthingFolders(fs.readFileSync(c, 'utf8'), home);
+    } catch {
+      /* not there */
+    }
+  }
+  return [];
+}
+
+export function parseSyncthingFolders(xml: string, home: string): Array<{ label: string; path: string }> {
+  const attr = (tag: string, name: string) => {
+    const v = new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+    return v?.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  };
+  const out: Array<{ label: string; path: string }> = [];
+  for (const [tag] of xml.matchAll(/<folder\s[^>]*>/g)) {
+    let p = attr(tag, 'path');
+    if (!p) continue;
+    if (p === '~' || p.startsWith('~/') || p.startsWith('~\\')) p = path.join(home, p.slice(1));
+    out.push({ label: attr(tag, 'label') || attr(tag, 'id') || path.basename(p), path: p });
+  }
+  return out;
+}

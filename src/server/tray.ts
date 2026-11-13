@@ -1,7 +1,8 @@
 // The icon in the Windows notification area: open the dashboard, show the log,
-// quit. A small PowerShell script draws it, so there's nothing extra to install.
-// The script asks the server to quit over stdout; the server closes the
-// script's stdin when it stops, and the script then removes its icon.
+// quit, and notifications. A small PowerShell script draws it, so there's nothing
+// extra to install. The script asks the server to quit over stdout; the server
+// sends notifications as JSON lines on stdin, and closes stdin when it stops,
+// and the script then removes its icon.
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,10 +15,10 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 $server = [System.Diagnostics.Process]::GetProcessById($ServerPid)
-# stdin stays open, silent, until the server stops (read on a pool thread so the menu stays responsive)
-$stdin = [Console]::OpenStandardInput()
-$buffer = New-Object byte[] 256
-$script:pending = $stdin.ReadAsync($buffer, 0, $buffer.Length)
+# stdin carries notifications until the server stops (read on a pool thread so the menu stays responsive)
+$stdin = New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))
+$script:pending = $stdin.ReadLineAsync()
+$script:notifyUrl = $Url
 
 # stdout is how we talk to the server, so nothing else may be written to it
 function Send([string]$message) {
@@ -92,6 +93,7 @@ $quit.add_Click({
   Send 'quit'
 })
 $tray.ContextMenuStrip = $menu
+$tray.add_BalloonTipClicked({ Start-Process $script:notifyUrl })
 $tray.add_MouseClick({
   param($sender, $e)
   if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Left) { Open-Dashboard }
@@ -103,11 +105,21 @@ if ($Intro) {
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 250
+function Show-Notification([string]$line) {
+  try {
+    $n = $line | ConvertFrom-Json
+    $script:notifyUrl = $n.url
+    $tray.ShowBalloonTip(10000, $n.title, $n.body, [System.Windows.Forms.ToolTipIcon]::None)
+  } catch { [Console]::Error.WriteLine("bad notification: $_") }
+}
+
 function Test-ServerGone {
   if ($server.HasExited) { return $true }
-  if (-not $script:pending.IsCompleted) { return $false }
-  if ($script:pending.IsFaulted -or $script:pending.Result -eq 0) { return $true }
-  $script:pending = $stdin.ReadAsync($buffer, 0, $buffer.Length)
+  while ($script:pending.IsCompleted) {
+    if ($script:pending.IsFaulted -or $null -eq $script:pending.Result) { return $true }
+    if ($script:pending.Result.Trim()) { Show-Notification $script:pending.Result }
+    $script:pending = $stdin.ReadLineAsync()
+  }
   return $false
 }
 
@@ -138,6 +150,8 @@ export interface TrayOptions {
 }
 
 export interface Tray {
+  /** Show a Windows notification; clicking it opens `url`. */
+  notify(title: string, body: string, url: string): void;
   /** Remove the icon; resolves once it's gone (or after a second). */
   stop(): Promise<void>;
 }
@@ -170,6 +184,10 @@ export function startTray(opts: TrayOptions): Tray | null {
     child.unref();
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
     return {
+      // Windows caps balloon titles at 63 characters and text at 255
+      notify: (title, body, url) => {
+        if (child.stdin!.writable) child.stdin!.write(JSON.stringify({ title: title.slice(0, 63), body: body.slice(0, 255), url }) + '\n');
+      },
       stop: () => {
         child.stdin!.end();
         return Promise.race([exited, new Promise<void>((resolve) => setTimeout(resolve, 1000))]);
