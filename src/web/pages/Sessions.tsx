@@ -114,10 +114,27 @@ export default function Sessions() {
       else next.delete(id);
       return next;
     });
+  // Shift-click selects the range from the last row you picked
+  const anchor = useRef<string | null>(null);
+  const pick = (id: string, range: boolean) => {
+    const i = range && anchor.current ? filtered.findIndex((s) => s.id === anchor.current) : -1;
+    const j = filtered.findIndex((s) => s.id === id);
+    if (i >= 0 && j >= 0) {
+      const span = filtered.slice(Math.min(i, j), Math.max(i, j) + 1);
+      setSelected((prev) => new Set([...prev, ...span.map((s) => s.id)]));
+    } else toggle(id, !selected.has(id));
+    anchor.current = id;
+  };
   const allSelected = filtered.length > 0 && filtered.every((s) => selected.has(s.id));
   const someSelected = filtered.some((s) => selected.has(s.id));
   // act only on what you can see: a selection hidden by the filters stays out of bulk actions
   const ids = filtered.filter((s) => selected.has(s.id)).map((s) => s.id);
+  useEffect(() => {
+    if (!someSelected || handoff) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && setSelected(new Set());
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [someSelected, handoff]);
   const filtersOn = !!(q || project || range !== 'all' || only);
 
   const deleteSelected = async () => {
@@ -218,7 +235,9 @@ export default function Sessions() {
             onChange={(v) => setSelected(v ? new Set(filtered.map((s) => s.id)) : new Set())}
             label="Select all shown sessions"
           />
-          <span className="mr-auto text-sm text-ink-2">{someSelected ? `${plural(ids.length, 'session')} selected` : 'Select sessions to hand off, star or delete'}</span>
+          <span className="mr-auto text-sm text-ink-2">{someSelected
+              ? `${plural(ids.length, 'session')} selected · click rows to add or remove, Shift-click for a range, Esc to clear`
+              : 'Select sessions to hand off, star or delete · Ctrl- or Shift-click a row to start'}</span>
           {someSelected && (
             <>
               <Button size="sm" variant="primary" icon={Send} onClick={() => setHandoff(true)}>
@@ -253,7 +272,22 @@ export default function Sessions() {
       ) : (
         <StripBay label="Sessions">
           {filtered.map((s) => (
-            <SessionStrip key={s.id} s={s} to={`/sessions/${s.id}`} selected={selected.has(s.id)} onSelect={remote ? undefined : (v) => toggle(s.id, v)} />
+            <SessionStrip
+              key={s.id}
+              s={s}
+              to={`/sessions/${s.id}`}
+              selected={selected.has(s.id)}
+              selecting={someSelected}
+              onSelect={
+                remote
+                  ? undefined
+                  : (v) => {
+                      anchor.current = s.id;
+                      toggle(s.id, v);
+                    }
+              }
+              onPick={remote ? undefined : (range) => pick(s.id, range)}
+            />
           ))}
         </StripBay>
       )}

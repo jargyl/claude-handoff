@@ -18,12 +18,15 @@ export interface StripProps {
   to?: string;
   selected?: boolean;
   onSelect?: (v: boolean) => void;
+  /** row click selects instead of opening: always with Ctrl/Cmd/Shift, plain clicks while `selecting` */
+  onPick?: (range: boolean) => void;
+  selecting?: boolean;
   /** replaces the metrics cells, e.g. a sync status and an action */
   trailing?: ReactNode;
   subtitle?: ReactNode;
 }
 
-export const SessionStrip = memo(function SessionStrip({ s, to, selected, onSelect, trailing, subtitle }: StripProps) {
+export const SessionStrip = memo(function SessionStrip({ s, to, selected, onSelect, onPick, selecting, trailing, subtitle }: StripProps) {
   const live = !!s.live;
   const branch = s.branch && s.branch !== 'HEAD' ? s.branch : undefined;
   const body = (
@@ -98,7 +101,19 @@ export const SessionStrip = memo(function SessionStrip({ s, to, selected, onSele
     selected ? 'border-signal-line/60 bg-signal-wash' : 'border-line bg-surface hover:border-line-strong hover:bg-raised',
   );
   return to ? (
-    <Link to={to} className={cls}>
+    <Link
+      to={to}
+      className={cls}
+      onMouseDown={onPick && ((e) => e.shiftKey && e.preventDefault())} // no text selection on shift-click
+      onClick={
+        onPick &&
+        ((e) => {
+          if (!selecting && !e.ctrlKey && !e.metaKey && !e.shiftKey) return;
+          e.preventDefault();
+          onPick(e.shiftKey);
+        })
+      }
+    >
       {body}
     </Link>
   ) : (
